@@ -559,7 +559,7 @@ mod tests {
     }
 
     #[test]
-    fn managed_agent_snapshot_omits_pending_and_persists_active_ownership() {
+    fn traex_managed_agent_snapshot_omits_pending_and_persists_active_ownership() {
         let mut state = state_with_workspaces(&["managed-snapshot"]);
         let root = state.workspaces[0].tabs[0].root_pane;
         let terminal_id = state.workspaces[0].tabs[0].panes[&root]
@@ -572,7 +572,7 @@ mod tests {
             .unwrap()
             .begin_managed_agent(
                 "reviewer".into(),
-                crate::detect::Agent::Pi,
+                crate::detect::Agent::Traex,
                 now,
                 std::time::Duration::ZERO,
                 std::time::Duration::from_secs(1),
@@ -585,14 +585,27 @@ mod tests {
 
         let terminal = state.terminals.get_mut(&terminal_id).unwrap();
         terminal.set_detected_state(
-            Some(crate::detect::Agent::Pi),
+            Some(crate::detect::Agent::Traex),
             crate::detect::AgentState::Idle,
         );
         assert!(terminal.reconcile_managed_agent_at(now, false));
         let active = capture_from_state(&state);
         let active_pane = &active.workspaces[0].tabs[0].panes[&root.raw()];
         assert_eq!(active_pane.agent_name.as_deref(), Some("reviewer"));
-        assert_eq!(active_pane.managed_agent_kind.as_deref(), Some("pi"));
+        assert_eq!(active_pane.managed_agent_kind.as_deref(), Some("traex"));
+
+        let json = serde_json::to_string(&active).unwrap();
+        let restored = parse_snapshot(&json).unwrap();
+        let restored_pane = &restored.workspaces[0].tabs[0].panes[&root.raw()];
+        assert_eq!(restored_pane.agent_name.as_deref(), Some("reviewer"));
+        assert_eq!(restored_pane.managed_agent_kind.as_deref(), Some("traex"));
+        assert_eq!(
+            restored_pane
+                .managed_agent_kind
+                .as_deref()
+                .and_then(crate::detect::parse_canonical_agent_label),
+            Some(crate::detect::Agent::Traex)
+        );
     }
 
     #[test]

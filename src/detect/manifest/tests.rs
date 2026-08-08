@@ -301,6 +301,96 @@ fn all_bundled_manifests_parse_and_validate() {
 }
 
 #[test]
+fn traex_manifest_matches_only_captured_terminal_states() {
+    let idle = osc_explain(
+        Agent::Traex,
+        "TRAE CLI Next (v0.200.19)\n────────────────────────\n❯ Use /skills to list available skills\n────────────────────────\n  GPT-5.6-Sol m… ▰ Full Access (shift+tab to cycle)",
+        "tmp",
+        "",
+    );
+    assert_eq!(idle.state, AgentState::Idle);
+    assert_eq!(
+        idle.matched_rule.as_ref().map(|rule| rule.id.as_str()),
+        Some("full_access_composer_idle")
+    );
+    assert!(idle.visible_idle);
+
+    let osc_working = osc_explain(
+        Agent::Traex,
+        "❯ Use /skills to list available skills\n  GPT-5.6-Sol m… ▰ Full Access (shift+tab to cycle)",
+        "⠋ tmp",
+        "",
+    );
+    assert_eq!(osc_working.state, AgentState::Working);
+    assert_eq!(
+        osc_working
+            .matched_rule
+            .as_ref()
+            .map(|rule| rule.id.as_str()),
+        Some("osc_spinner_working")
+    );
+    assert!(osc_working.visible_working);
+
+    for status_line in [
+        "◈ Working… (2s • esc to interrupt)",
+        "◇ Working… (6s • esc to interrupt) · 1 shell running…",
+    ] {
+        let visible_working = explain(
+            Agent::Traex,
+            &format!(
+                "{status_line}\n❯ Use /skills to list available skills\n  GPT-5.6-Sol m… ▰ Full Access (shift+tab to cycle)"
+            ),
+        );
+        assert_eq!(visible_working.state, AgentState::Working);
+        assert_eq!(
+            visible_working
+                .matched_rule
+                .as_ref()
+                .map(|rule| rule.id.as_str()),
+            Some("working_interrupt_hint")
+        );
+    }
+
+    let trust = explain(
+        Agent::Traex,
+        "Do you trust the contents of this directory?\n❯ 1. Yes, continue\n  2. No, quit\nPress enter to continue",
+    );
+    assert_eq!(trust.state, AgentState::Blocked);
+    assert_eq!(
+        trust.matched_rule.as_ref().map(|rule| rule.id.as_str()),
+        Some("directory_trust_prompt")
+    );
+    assert!(trust.visible_blocker);
+
+    let alias_migration = explain(
+        Agent::Traex,
+        "TRAE CLI Next is installed.\nDo you want to point Coco command aliases to TRAE\nCLI Next?\n❯ Switch aliases\n  Keep Coco",
+    );
+    assert_eq!(alias_migration.state, AgentState::Blocked);
+    assert_eq!(
+        alias_migration
+            .matched_rule
+            .as_ref()
+            .map(|rule| rule.id.as_str()),
+        Some("alias_migration_prompt")
+    );
+
+    let unobserved = explain(Agent::Traex, "an unobserved Traex surface");
+    assert_eq!(unobserved.state, AgentState::Unknown);
+    assert_eq!(
+        unobserved
+            .matched_rule
+            .as_ref()
+            .map(|rule| rule.id.as_str()),
+        Some("unobserved_screen_unknown")
+    );
+    assert_eq!(unobserved.fallback_reason, None);
+    assert!(!unobserved.visible_idle);
+    assert!(!unobserved.visible_working);
+    assert!(!unobserved.visible_blocker);
+}
+
+#[test]
 fn devin_manifest_detects_idle_working_and_blocked_states() {
     let idle = explain(
         Agent::Devin,

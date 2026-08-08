@@ -225,6 +225,198 @@ fn agent_start_command_works() {
 }
 
 #[test]
+fn traex_identity_manifest_and_api_surfaces_work_end_to_end() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let base = unique_test_dir();
+    let config_home = base.join("config");
+    let runtime_dir = base.join("runtime");
+    let socket_path = runtime_dir.join("herdr.sock");
+    let bin = base.join("bin");
+    fs::create_dir_all(&bin).unwrap();
+    let idle_script = "#!/bin/sh\nunset HERDR_AGENT\nprintf 'TRAE CLI Next (v0.200.19)\\n────────────────────────\\n❯ Use /skills to list available skills\\n────────────────────────\\n  GPT-5.6-Sol m… ▰ Full Access (shift+tab to cycle)\\n'\nwhile IFS= read -r _; do :; done\n";
+    for executable in ["traex", "traecli", "traex-helper", "codex"] {
+        let path = bin.join(executable);
+        fs::write(&path, idle_script).unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    let hinted = bin.join("wrapped-agent");
+    fs::write(
+        &hinted,
+        "#!/bin/sh\nprintf '❯ Use /skills to list available skills\\n  GPT-5.6-Sol m… ▰ Full Access (shift+tab to cycle)\\n'\nwhile IFS= read -r _; do :; done\n",
+    )
+    .unwrap();
+    fs::set_permissions(&hinted, fs::Permissions::from_mode(0o755)).unwrap();
+
+    let herdr = spawn_herdr_with_path(&config_home, &runtime_dir, &socket_path, Some(&bin));
+    wait_for_socket(&socket_path, Duration::from_secs(5));
+    let created = run_cli_json(
+        &socket_path,
+        &["workspace", "create", "--cwd", base.to_str().unwrap()],
+    );
+    let workspace_id = created["result"]["workspace"]["workspace_id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let tab_id = created["result"]["root_pane"]["tab_id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let pane_id = created["result"]["root_pane"]["pane_id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let started = run_cli_json(
+        &socket_path,
+        &[
+            "agent",
+            "start",
+            "traex-native",
+            "--kind",
+            "traex",
+            "--pane",
+            &pane_id,
+            "--timeout",
+            "8000",
+        ],
+    );
+    assert_eq!(started["result"]["argv"][0], "traex");
+    assert_eq!(started["result"]["agent"]["agent"], "traex");
+    assert_eq!(started["result"]["agent"]["agent_status"], "idle");
+
+    let fetched = run_cli_json(&socket_path, &["agent", "get", "traex-native"]);
+    assert_eq!(fetched["result"]["agent"]["agent"], "traex");
+    assert_eq!(fetched["result"]["agent"]["agent_status"], "idle");
+    let listed = run_cli_json(&socket_path, &["agent", "list"]);
+    let listed_native = listed["result"]["agents"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|agent| agent["name"] == "traex-native")
+        .expect("started Traex agent should be listed");
+    assert_eq!(listed_native["agent"], "traex");
+
+    let pane = run_cli_json(&socket_path, &["pane", "get", &pane_id]);
+    assert_eq!(pane["result"]["pane"]["agent"], "traex");
+    assert_eq!(pane["result"]["pane"]["agent_status"], "idle");
+    let tab = run_cli_json(&socket_path, &["tab", "get", &tab_id]);
+    assert_eq!(tab["result"]["tab"]["agent_status"], "idle");
+    let workspaces = run_cli_json(&socket_path, &["workspace", "list"]);
+    let workspace = workspaces["result"]["workspaces"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|workspace| workspace["workspace_id"] == workspace_id)
+        .expect("Traex workspace should be listed");
+    assert_eq!(workspace["agent_status"], "idle");
+
+    let explained = run_cli(&socket_path, &["agent", "explain", &pane_id, "--json"]);
+    assert!(explained.status.success());
+    let explained: serde_json::Value = serde_json::from_slice(&explained.stdout).unwrap();
+    assert_eq!(explained["agent"], "traex");
+    assert_eq!(explained["state"], "idle");
+    assert_eq!(explained["matched_rule"]["id"], "full_access_composer_idle");
+    assert_eq!(explained["manifest_version"], "2026.08.08.1");
+
+    let split = run_cli_json(
+        &socket_path,
+        &["pane", "split", &pane_id, "--direction", "right"],
+    );
+    let alias_pane = split["result"]["pane"]["pane_id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(
+        run_cli(&socket_path, &["pane", "run", &alias_pane, "traecli"])
+            .status
+            .success()
+    );
+    assert!(wait_until(
+        Duration::from_secs(5),
+        Duration::from_millis(50),
+        || {
+            let pane = run_cli_json(&socket_path, &["pane", "get", &alias_pane]);
+            pane["result"]["pane"]["agent"] == "traex"
+                && pane["result"]["pane"]["agent_status"] == "idle"
+        }
+    ));
+
+    let split = run_cli_json(
+        &socket_path,
+        &["pane", "split", &alias_pane, "--direction", "down"],
+    );
+    let hinted_pane = split["result"]["pane"]["pane_id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(run_cli(
+        &socket_path,
+        &[
+            "pane",
+            "run",
+            &hinted_pane,
+            "HERDR_AGENT=traex wrapped-agent",
+        ],
+    )
+    .status
+    .success());
+    assert!(wait_until(
+        Duration::from_secs(5),
+        Duration::from_millis(50),
+        || {
+            run_cli_json(&socket_path, &["pane", "get", &hinted_pane])["result"]["pane"]["agent"]
+                == "traex"
+        }
+    ));
+
+    let split = run_cli_json(
+        &socket_path,
+        &["pane", "split", &hinted_pane, "--direction", "down"],
+    );
+    let unrelated_pane = split["result"]["pane"]["pane_id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(run_cli(
+        &socket_path,
+        &["pane", "run", &unrelated_pane, "traex-helper"],
+    )
+    .status
+    .success());
+    thread::sleep(Duration::from_millis(300));
+    let unrelated = run_cli_json(&socket_path, &["pane", "get", &unrelated_pane]);
+    assert_eq!(
+        unrelated["result"]["pane"]["agent"],
+        serde_json::Value::Null
+    );
+
+    let split = run_cli_json(
+        &socket_path,
+        &["pane", "split", &unrelated_pane, "--direction", "down"],
+    );
+    let codex_pane = split["result"]["pane"]["pane_id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(
+        run_cli(&socket_path, &["pane", "run", &codex_pane, "codex"])
+            .status
+            .success()
+    );
+    assert!(wait_until(
+        Duration::from_secs(5),
+        Duration::from_millis(50),
+        || {
+            run_cli_json(&socket_path, &["pane", "get", &codex_pane])["result"]["pane"]["agent"]
+                == "codex"
+        }
+    ));
+
+    cleanup_spawned_herdr(herdr, base);
+}
+
+#[test]
 fn agent_start_rejects_a_shell_replaced_by_a_foreground_program() {
     let base = unique_test_dir();
     let config_home = base.join("config");
