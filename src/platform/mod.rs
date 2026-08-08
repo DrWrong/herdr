@@ -424,6 +424,10 @@ mod tests {
             parse_agent_env_hint(b"HERDR_AGENT=codex"),
             Some(crate::detect::Agent::Codex)
         );
+        assert_eq!(
+            parse_agent_env_hint(b"HERDR_AGENT=traex"),
+            Some(crate::detect::Agent::Traex)
+        );
     }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]

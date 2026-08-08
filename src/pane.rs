@@ -3677,6 +3677,25 @@ mod tests {
     }
 
     #[test]
+    fn inherited_codex_hint_remains_authoritative_for_traex_process() {
+        let job = crate::platform::ForegroundJob {
+            process_group_id: 99,
+            processes: vec![foreground_process(99, "traex")],
+        };
+
+        let result = probe_foreground_process_from_jobs(
+            42,
+            Some(99),
+            Some(job),
+            || None,
+            |pid| (pid == 99).then_some(Agent::Codex),
+        );
+
+        assert_eq!(result.agent, Some(Agent::Codex));
+        assert_eq!(result.process_name.as_deref(), Some("codex"));
+    }
+
+    #[test]
     fn foreground_agent_hint_on_inherited_child_environment_is_authoritative() {
         let job = crate::platform::ForegroundJob {
             process_group_id: 99,
