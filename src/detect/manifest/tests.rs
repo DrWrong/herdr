@@ -329,6 +329,27 @@ fn traex_manifest_matches_only_captured_terminal_states() {
     );
     assert!(workspace_edit_idle.visible_idle);
 
+    for footer in [
+        "GPT-5.6-Sol m… ▰ Full Access",
+        "GPT-5.6-Sol… ◐ Workspace Edit",
+    ] {
+        let no_hint = explain(
+            Agent::Traex,
+            &format!(
+                "TRAE CLI Next (v0.200.19)\n────────────────────────\n❯ Use /skills to list available skills\n────────────────────────\n  {footer}"
+            ),
+        );
+        assert_eq!(no_hint.state, AgentState::Unknown);
+        assert_eq!(
+            no_hint
+                .matched_rule
+                .as_ref()
+                .map(|rule| rule.id.as_str()),
+            Some("unobserved_screen_unknown")
+        );
+        assert!(!no_hint.visible_idle);
+    }
+
     let osc_working = osc_explain(
         Agent::Traex,
         "❯ Use /skills to list available skills\n  GPT-5.6-Sol m… ▰ Full Access (shift+tab to cycle)",

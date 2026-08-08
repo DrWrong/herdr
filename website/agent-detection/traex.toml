@@ -61,7 +61,7 @@ region = "bottom_non_empty_lines(3)"
 visible_idle = true
 line_regex = [
   '^❯ ',
-  '^.*(?:▰ Full Access|◐ Workspace Edit)(?: \(shift\+tab to cycle\))?$',
+  '^.*(?:▰ Full Access|◐ Workspace Edit) \(shift\+tab to cycle\)$',
 ]
 
 # Known agents normally inherit a generic idle fallback. Traex stays unknown
