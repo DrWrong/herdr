@@ -1,5 +1,5 @@
 id = "traex"
-version = "2026.08.08.1"
+version = "2026.08.08.2"
 min_engine_version = 1
 updated_at = "2026-08-08T00:00:00Z"
 aliases = ["traecli"]
@@ -51,15 +51,18 @@ region = "whole_recent"
 visible_working = true
 line_regex = ['^[◈◇] Working… \([^)]*esc to interrupt\)(?: · .*)?$']
 
-# The full-access composer is the only captured idle surface. Working screens
-# keep the composer visible, so the two working rules must retain precedence.
+# The composer footer is the captured idle surface. Working screens keep the
+# composer visible, so the two working rules must retain precedence.
 [[rules]]
 id = "full_access_composer_idle"
 state = "idle"
 priority = 500
 region = "bottom_non_empty_lines(3)"
 visible_idle = true
-line_regex = ['^❯ ', '▰ Full Access(?: \(shift\+tab to cycle\))?$']
+line_regex = [
+  '^❯ ',
+  '^.*(?:▰ Full Access|◐ Workspace Edit)(?: \(shift\+tab to cycle\))?$',
+]
 
 # Known agents normally inherit a generic idle fallback. Traex stays unknown
 # unless one of the captured states above matches.

@@ -315,6 +315,20 @@ fn traex_manifest_matches_only_captured_terminal_states() {
     );
     assert!(idle.visible_idle);
 
+    let workspace_edit_idle = explain(
+        Agent::Traex,
+        "TRAE CLI Next (v0.200.19)\n────────────────────────\n❯ Improve documentation in @filename\n──────────────────────────────────────────────────────\n  GPT-5.6-Sol… ◐ Workspace Edit (shift+tab to cycle)",
+    );
+    assert_eq!(workspace_edit_idle.state, AgentState::Idle);
+    assert_eq!(
+        workspace_edit_idle
+            .matched_rule
+            .as_ref()
+            .map(|rule| rule.id.as_str()),
+        Some("full_access_composer_idle")
+    );
+    assert!(workspace_edit_idle.visible_idle);
+
     let osc_working = osc_explain(
         Agent::Traex,
         "❯ Use /skills to list available skills\n  GPT-5.6-Sol m… ▰ Full Access (shift+tab to cycle)",
