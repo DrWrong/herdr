@@ -1,0 +1,71 @@
+id = "traex"
+version = "2026.08.08.1"
+min_engine_version = 1
+updated_at = "2026-08-08T00:00:00Z"
+aliases = ["traecli"]
+
+# Captured from TRAE CLI Next v0.200.19 before it opens an untrusted project.
+[[rules]]
+id = "directory_trust_prompt"
+state = "blocked"
+priority = 1000
+region = "whole_recent"
+visible_blocker = true
+contains = [
+  "Do you trust the contents of this directory?",
+  "Yes, continue",
+  "No, quit",
+  "Press enter to continue",
+]
+
+# Captured from the installed `traecli` compatibility executable (v0.120.47).
+[[rules]]
+id = "alias_migration_prompt"
+state = "blocked"
+priority = 950
+region = "whole_recent"
+visible_blocker = true
+contains = [
+  "TRAE CLI Next is installed.",
+  "Do you want to point Coco command aliases",
+  "CLI Next?",
+  "Switch aliases",
+  "Keep Coco",
+]
+
+# TRAE CLI Next prefixes its OSC title with a braille spinner while working.
+[[rules]]
+id = "osc_spinner_working"
+state = "working"
+priority = 900
+region = "osc_title"
+visible_working = true
+regex = ['(?:^| )[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏](?: |$)']
+
+# The visible fallback remains useful if a terminal strips OSC titles.
+[[rules]]
+id = "working_interrupt_hint"
+state = "working"
+priority = 850
+region = "whole_recent"
+visible_working = true
+line_regex = ['^[◈◇] Working… \([^)]*esc to interrupt\)(?: · .*)?$']
+
+# The full-access composer is the only captured idle surface. Working screens
+# keep the composer visible, so the two working rules must retain precedence.
+[[rules]]
+id = "full_access_composer_idle"
+state = "idle"
+priority = 500
+region = "bottom_non_empty_lines(3)"
+visible_idle = true
+line_regex = ['^❯ ', '▰ Full Access(?: \(shift\+tab to cycle\))?$']
+
+# Known agents normally inherit a generic idle fallback. Traex stays unknown
+# unless one of the captured states above matches.
+[[rules]]
+id = "unobserved_screen_unknown"
+state = "unknown"
+priority = 1
+region = "whole_recent"
+regex = ['(?s).*']

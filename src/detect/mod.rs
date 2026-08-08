@@ -62,10 +62,11 @@ pub enum Agent {
     Kilo,
     Qodercli,
     Maki,
+    Traex,
 }
 
 impl Agent {
-    pub const ALL: [Self; 21] = [
+    pub const ALL: [Self; 22] = [
         Self::Pi,
         Self::Claude,
         Self::Codex,
@@ -87,9 +88,10 @@ impl Agent {
         Self::Kilo,
         Self::Qodercli,
         Self::Maki,
+        Self::Traex,
     ];
 
-    pub const SCREEN_MANIFEST_AGENTS: [Self; 19] = [
+    pub const SCREEN_MANIFEST_AGENTS: [Self; 20] = [
         Self::Pi,
         Self::Claude,
         Self::Codex,
@@ -109,6 +111,7 @@ impl Agent {
         Self::Kilo,
         Self::Qodercli,
         Self::Maki,
+        Self::Traex,
     ];
 }
 
@@ -135,6 +138,7 @@ pub fn agent_label(agent: Agent) -> &'static str {
         Agent::Kilo => "kilo",
         Agent::Qodercli => "qodercli",
         Agent::Maki => "maki",
+        Agent::Traex => "traex",
     }
 }
 
@@ -167,6 +171,7 @@ pub fn interactive_agent_executable(agent: Agent) -> &'static str {
         Agent::Kilo => "kilo",
         Agent::Qodercli => "qodercli",
         Agent::Maki => "maki",
+        Agent::Traex => "traex",
     }
 }
 
@@ -203,6 +208,7 @@ fn lookup_agent(name: &str) -> Option<Agent> {
         "kilo" | "kilo-code" | "kilo code" => Some(Agent::Kilo),
         "qodercli" | "qoderclicn" | "qoder" | "qodercn" => Some(Agent::Qodercli),
         "maki" => Some(Agent::Maki),
+        "traex" | "traecli" => Some(Agent::Traex),
         _ => None,
     }
 }
@@ -710,6 +716,8 @@ mod tests {
         assert_eq!(identify_agent("kilo"), Some(Agent::Kilo));
         assert_eq!(identify_agent("kilo-code"), Some(Agent::Kilo));
         assert_eq!(identify_agent("maki"), Some(Agent::Maki));
+        assert_eq!(identify_agent("traex"), Some(Agent::Traex));
+        assert_eq!(identify_agent("traecli"), Some(Agent::Traex));
     }
 
     #[test]
@@ -736,6 +744,8 @@ mod tests {
         assert_eq!(parse_agent_label("hermes-agent"), Some(Agent::Hermes));
         assert_eq!(parse_agent_label("maki"), Some(Agent::Maki));
         assert_eq!(parse_agent_label("kilo-code"), Some(Agent::Kilo));
+        assert_eq!(parse_agent_label("traex"), Some(Agent::Traex));
+        assert_eq!(parse_agent_label("traecli"), Some(Agent::Traex));
     }
 
     #[test]
@@ -778,6 +788,7 @@ mod tests {
             (Agent::Kilo, "kilo"),
             (Agent::Qodercli, "qodercli"),
             (Agent::Maki, "maki"),
+            (Agent::Traex, "traex"),
         ];
         assert_eq!(expected.len(), Agent::ALL.len());
         for (agent, executable) in expected {
@@ -820,6 +831,9 @@ mod tests {
         assert_eq!(identify_agent("zsh"), None);
         assert_eq!(identify_agent("vim"), None);
         assert_eq!(identify_agent("node"), None);
+        assert_eq!(identify_agent("my-traex"), None);
+        assert_eq!(identify_agent("traex-helper"), None);
+        assert_eq!(identify_agent("traecli-helper"), None);
     }
 
     #[test]
@@ -842,6 +856,42 @@ mod tests {
 
         assert_eq!(
             identify_agent_in_job(&job),
+            Some((Agent::Codex, "codex".to_string()))
+        );
+    }
+
+    #[test]
+    fn identify_agent_in_job_recognizes_exact_traex_process_shapes() {
+        for name in ["traex", "traecli"] {
+            let job = crate::platform::ForegroundJob {
+                process_group_id: 123,
+                processes: vec![foreground_process(123, name, &[name])],
+            };
+
+            assert_eq!(
+                identify_agent_in_job(&job),
+                Some((Agent::Traex, name.to_string()))
+            );
+        }
+    }
+
+    #[test]
+    fn identify_agent_in_job_does_not_substring_match_traex_names() {
+        for name in ["my-traex", "traex-helper", "traecli-helper"] {
+            let job = crate::platform::ForegroundJob {
+                process_group_id: 123,
+                processes: vec![foreground_process(123, name, &[name])],
+            };
+
+            assert_eq!(identify_agent_in_job(&job), None, "matched {name}");
+        }
+
+        let codex = crate::platform::ForegroundJob {
+            process_group_id: 123,
+            processes: vec![foreground_process(123, "codex", &["codex"])],
+        };
+        assert_eq!(
+            identify_agent_in_job(&codex),
             Some((Agent::Codex, "codex".to_string()))
         );
     }
