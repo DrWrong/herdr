@@ -341,10 +341,7 @@ fn traex_manifest_matches_only_captured_terminal_states() {
         );
         assert_eq!(no_hint.state, AgentState::Unknown);
         assert_eq!(
-            no_hint
-                .matched_rule
-                .as_ref()
-                .map(|rule| rule.id.as_str()),
+            no_hint.matched_rule.as_ref().map(|rule| rule.id.as_str()),
             Some("unobserved_screen_unknown")
         );
         assert!(!no_hint.visible_idle);
