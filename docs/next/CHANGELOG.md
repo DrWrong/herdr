@@ -12,6 +12,7 @@
 - Bumped the client/server protocol version to 20 for pane terminal bell forwarding.
 
 ### Fixed
+- Chinese IME candidate selections now commit into Pi and other event-reporting pane applications instead of leaving their composers empty when they also enable `modifyOtherKeys`.
 - `herdr config check` now reports unknown built-in theme names instead of silently accepting them. (#2452)
 - macOS `herdr --remote` clients now keep the accepted bridge socket blocking, preventing an immediate disconnect after the protocol handshake. (#2478, thanks @mathijshenquet)
 - Prefix keybindings now preserve Shift in WezTerm Kitty keyboard mode, so commands such as config reload no longer trigger their unshifted action. (#2435)

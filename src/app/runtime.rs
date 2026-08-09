@@ -204,10 +204,15 @@ impl App {
                         self.execute_repeat_plan(lease_key, key, plan).await
                     }
                     crossterm::event::KeyEventKind::Release => {
+                        let was_tracked = self.input_leases.contains(&lease_key);
                         if let Some(lease) = self.input_leases.remove_forwarded(&lease_key) {
                             let _ = self
                                 .forward_terminal_key_to_target(&lease.target, key)
                                 .await;
+                        } else if !was_tracked {
+                            if let Some(target) = self.unleased_event_type_release_target() {
+                                let _ = self.forward_terminal_key_to_target(&target, key).await;
+                            }
                         }
                         false
                     }
