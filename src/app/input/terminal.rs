@@ -264,6 +264,30 @@ impl App {
         }
     }
 
+    pub(crate) fn unleased_event_type_release_target(&self) -> Option<TerminalInputTarget> {
+        let target = if let Some(popup) = &self.state.popup_pane {
+            TerminalInputTarget {
+                terminal_id: popup.terminal_id.clone(),
+            }
+        } else if self.state.mode == Mode::Terminal {
+            let ws_idx = self.state.active?;
+            let workspace = self.state.workspaces.get(ws_idx)?;
+            let pane_id = workspace.focused_pane_id()?;
+            TerminalInputTarget {
+                terminal_id: workspace.terminal_id(pane_id)?.clone(),
+            }
+        } else {
+            return None;
+        };
+        let runtime = self.terminal_input_runtime(&target)?;
+        let protocol = runtime.keyboard_protocol();
+        (protocol.reports_event_types()
+            && runtime
+                .input_state()
+                .is_some_and(|state| state.modify_other_keys))
+        .then_some(target)
+    }
+
     pub(crate) fn host_keyboard_report_all_requested(&self) -> bool {
         if self.state.popup_pane.is_none()
             && matches!(self.state.mode, Mode::Prefix | Mode::Navigate)
@@ -282,14 +306,12 @@ impl App {
             None
         };
 
-        runtime.is_some_and(|runtime| {
-            let protocol = runtime.keyboard_protocol();
-            protocol.reports_all_keys()
-                || (protocol.reports_event_types()
-                    && runtime
-                        .input_state()
-                        .is_some_and(|state| state.modify_other_keys))
-        })
+        // Mirror only an explicit inner report-all request. Promoting the host
+        // merely because an event-type pane also enables modifyOtherKeys turns
+        // ordinary composition into physical key escape sequences and can
+        // suppress the IME commit entirely. Unleased releases from the
+        // IME-compatible host mode are forwarded separately above.
+        runtime.is_some_and(|runtime| runtime.keyboard_protocol().reports_all_keys())
     }
 
     fn terminal_input_runtime(

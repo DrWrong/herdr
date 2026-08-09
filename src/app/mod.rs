@@ -1710,9 +1710,15 @@ impl App {
                             self.execute_repeat_plan_headless(source_id, lease_key, key, plan);
                         }
                         crossterm::event::KeyEventKind::Release => {
+                            let was_tracked = self.input_leases.contains(&lease_key);
                             if let Some(lease) = self.input_leases.remove_forwarded(&lease_key) {
                                 let _ = self
                                     .forward_terminal_key_to_target_headless(&lease.target, key);
+                            } else if !was_tracked {
+                                if let Some(target) = self.unleased_event_type_release_target() {
+                                    let _ =
+                                        self.forward_terminal_key_to_target_headless(&target, key);
+                                }
                             }
                         }
                     }
@@ -5226,7 +5232,7 @@ last_pane = "prefix+tab"
     }
 
     #[tokio::test]
-    async fn host_report_all_supplies_printable_releases_for_event_type_only_panes() {
+    async fn event_type_modify_other_keys_forwards_unleased_printable_releases() {
         let mut app = test_app();
         let mut workspace = Workspace::test_new("test");
         let focused = workspace.focused_pane_id().unwrap();
@@ -5250,9 +5256,17 @@ last_pane = "prefix+tab"
         app.state.selected = 0;
         app.state.mode = Mode::Terminal;
 
-        assert!(app.host_keyboard_report_all_requested());
+        assert!(!app.host_keyboard_report_all_requested());
 
-        app.route_client_input(b"\x1b[106;1:1u\x1b[106;1:2u\x1b[106;1:3u".to_vec());
+        // An IME-compatible outer Kitty mode sends printable presses as text
+        // and reports their releases separately. Text commits deliberately do
+        // not create physical leases, so preserve the release for this exact
+        // event-type + modifyOtherKeys destination instead of forcing the host
+        // into report-all mode.
+        app.route_client_input(b"j".to_vec());
+        app.route_client_input(b"j".to_vec());
+        app.route_client_input(b"\x1b[106;1:3u".to_vec());
+
         assert_eq!(rx.recv().await.unwrap(), bytes::Bytes::from_static(b"j"));
         assert_eq!(rx.recv().await.unwrap(), bytes::Bytes::from_static(b"j"));
         assert_eq!(
@@ -5260,6 +5274,7 @@ last_pane = "prefix+tab"
             bytes::Bytes::from_static(b"\x1b[106;1:3u")
         );
         assert!(rx.try_recv().is_err());
+        assert!(app.input_leases.is_empty());
 
         let runtime = app
             .state
@@ -5279,6 +5294,45 @@ last_pane = "prefix+tab"
                 .is_some_and(|state| state.modify_other_keys));
             assert!(!app.host_keyboard_report_all_requested());
         }
+    }
+
+    #[tokio::test]
+    async fn pi_keyboard_modes_keep_host_ime_compatible_and_forward_committed_text() {
+        let mut app = test_app();
+        let mut workspace = Workspace::test_new("test");
+        let focused = workspace.focused_pane_id().unwrap();
+        let (runtime, mut rx) = TerminalRuntime::test_with_channel_and_scrollback_bytes(
+            80,
+            24,
+            0,
+            b"\x1b[>7u\x1b[>4;2m",
+            3,
+        );
+        assert_eq!(
+            runtime.keyboard_protocol(),
+            crate::input::KeyboardProtocol::Kitty { flags: 7 }
+        );
+        assert!(runtime
+            .input_state()
+            .is_some_and(|state| state.modify_other_keys));
+        workspace.tabs[0].runtimes.insert(focused, runtime);
+        app.state.workspaces = vec![workspace];
+        app.state.active = Some(0);
+        app.state.selected = 0;
+        app.state.mode = Mode::Terminal;
+
+        assert!(!app.host_keyboard_report_all_requested());
+
+        app.route_client_input("你".as_bytes().to_vec());
+        app.route_client_input(b"\x1b[106;1:3u".to_vec());
+
+        assert_eq!(rx.recv().await.unwrap().as_ref(), "你".as_bytes());
+        assert_eq!(
+            rx.recv().await.unwrap(),
+            bytes::Bytes::from_static(b"\x1b[106;1:3u")
+        );
+        assert!(rx.try_recv().is_err());
+        assert!(app.input_leases.is_empty());
     }
 
     #[tokio::test]
@@ -5813,8 +5867,13 @@ last_pane = "prefix+tab"
         let mut app = test_app();
         let mut workspace = Workspace::test_new("test");
         let focused = workspace.focused_pane_id().unwrap();
-        let (runtime, mut rx) =
-            TerminalRuntime::test_with_channel_and_scrollback_bytes(80, 24, 0, b"\x1b[>15u", 2);
+        let (runtime, mut rx) = TerminalRuntime::test_with_channel_and_scrollback_bytes(
+            80,
+            24,
+            0,
+            b"\x1b[>4;2m\x1b[=3;1u",
+            2,
+        );
         workspace.tabs[0].runtimes.insert(focused, runtime);
         app.state.workspaces = vec![workspace];
         app.state.active = Some(0);
