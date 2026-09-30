@@ -303,7 +303,12 @@ fn all_bundled_manifests_parse_and_validate() {
 // Compact control fragments from the named-lab TraeCode CLI 0.207.1 reads,
 // rather than full-screen fixtures. Model/version/path/cost are incidental.
 fn traex_context_composer(above: &str, prompt: &str, footer: &str) -> String {
-    format!("{above}\n───────────────────────── lab ─\n❯ {prompt}\n───────────────────────────────\n  {footer}\n")
+    let prompt_line = if prompt.is_empty() {
+        "❯".to_string()
+    } else {
+        format!("❯ {prompt}")
+    };
+    format!("{above}\n───────────────────────── lab ─\n{prompt_line}\n───────────────────────────────\n  {footer}\n")
 }
 
 #[test]

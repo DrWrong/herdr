@@ -91,7 +91,7 @@ state = "idle"
 priority = 860
 region = "bottom_non_empty_lines(12)"
 visible_idle = true
-regex = ['(?m)^─{3,}[^\n]*\n❯ [^\n]*(?:\n[^\n]*)*\n─{3,}[^\n]*\n +[^\n]+ · Context \d{1,3}% left[^\n]*\s*\z']
+regex = ['(?m)^─{3,}[^\n]*\n❯(?: [^\n]*)?(?:\n[^\n]*)*\n─{3,}[^\n]*\n +[^\n]+ · Context \d{1,3}% left[^\n]*\s*\z']
 
 # The visible fallback remains useful if a terminal strips OSC titles.
 [[rules]]

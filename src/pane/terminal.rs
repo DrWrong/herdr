@@ -5007,27 +5007,35 @@ mod tests {
     fn traex_loaded_controls_survive_color_wrapping_and_alternate_screen() {
         for cols in [44, 63, 91, 120] {
             for alternate in [false, true] {
-                for (status, expected) in [
-                    ("◆ Completed", crate::detect::AgentState::Idle),
-                    (
-                        "◆ Running command… (10s • esc to interrupt) · 1 shell running… · /ps to manage",
-                        crate::detect::AgentState::Working,
-                    ),
+                for prompt in [
+                    "",
+                    "A longer composer input that wraps over multiple terminal rows for this detection probe",
                 ] {
-                    let (tx, _rx) = mpsc::channel(4);
-                    let mut terminal = crate::ghostty::Terminal::new(cols, 24, 100).unwrap();
-                    if alternate {
-                        terminal.write(b"\x1b[?1049h");
+                    for (status, expected) in [
+                        ("◆ Completed", crate::detect::AgentState::Idle),
+                        (
+                            "◆ Running command… (10s • esc to interrupt) · 1 shell running… · /ps to manage",
+                            crate::detect::AgentState::Working,
+                        ),
+                    ] {
+                        let (tx, _rx) = mpsc::channel(4);
+                        let mut terminal = crate::ghostty::Terminal::new(cols, 24, 100).unwrap();
+                        if alternate {
+                            terminal.write(b"\x1b[?1049h");
+                        }
+                        let border = "─".repeat(usize::from(cols - 1));
+                        let text = format!(
+                            "\x1b[36m{status}\x1b[0m\r\n\r\n{border}\r\n\x1b[1m❯ {prompt}\x1b[0m\r\n{border}\r\n\x1b[90m  model high · Context 93% left\x1b[0m"
+                        );
+                        terminal.write(text.as_bytes());
+                        let pane = GhosttyPaneTerminal::new(terminal, tx).unwrap();
+                        let screen = pane.detection_text();
+                        if prompt.is_empty() {
+                            assert!(screen.lines().any(|line| line == "❯"), "{screen}");
+                        }
+                        let result = crate::detect::detect_agent(Some(crate::detect::Agent::Traex), &screen);
+                        assert_eq!(result.state, expected, "cols={cols}, alternate={alternate}, prompt={prompt:?}: {screen}");
                     }
-                    let border = "─".repeat(usize::from(cols - 1));
-                    let text = format!(
-                        "\x1b[36m{status}\x1b[0m\r\n\r\n{border}\r\n\x1b[1m❯ A longer composer input that wraps over multiple terminal rows for this detection probe\x1b[0m\r\n{border}\r\n\x1b[90m  model high · Context 93% left\x1b[0m"
-                    );
-                    terminal.write(text.as_bytes());
-                    let pane = GhosttyPaneTerminal::new(terminal, tx).unwrap();
-                    let screen = pane.detection_text();
-                    let result = crate::detect::detect_agent(Some(crate::detect::Agent::Traex), &screen);
-                    assert_eq!(result.state, expected, "cols={cols}, alternate={alternate}: {screen}");
                 }
             }
         }
