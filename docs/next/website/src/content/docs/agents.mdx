@@ -62,6 +62,8 @@ Blocked detection is deliberately strict for screen-manifest agents. Herdr only 
 
 TRAE CLI is deliberately stricter: screens not backed by captured Traex evidence remain `unknown` instead of using the generic known-agent idle fallback.
 
+TraeCode CLI's loaded bordered composer with a context meter is recognized as `idle`; live interrupt controls remain `working`, and command approvals or structured questions are `blocked`. A footer, cost, or static terminal title alone does not establish readiness.
+
 For other agents, this means unusual new prompts may initially show as `idle` instead of `blocked` until Herdr learns that screen shape. Those interactions should not make Herdr send input or take destructive action; they only affect the visible status and waits.
 
 ## Detection manifests

@@ -300,6 +300,133 @@ fn all_bundled_manifests_parse_and_validate() {
     }
 }
 
+// Compact control fragments from the named-lab TraeCode CLI 0.207.1 reads,
+// rather than full-screen fixtures. Model/version/path/cost are incidental.
+fn traex_context_composer(above: &str, prompt: &str, footer: &str) -> String {
+    let prompt_line = if prompt.is_empty() {
+        "❯".to_string()
+    } else {
+        format!("❯ {prompt}")
+    };
+    format!("{above}\n───────────────────────── lab ─\n{prompt_line}\n───────────────────────────────\n  {footer}\n")
+}
+
+#[test]
+fn traex_loaded_context_composer_requires_live_structure() {
+    for (prompt, footer) in [
+        (
+            "Find and fix a bug in @filename",
+            "GPT-5.6-Sol high · Context 100% left · ⎇ herdr · /work…",
+        ),
+        ("", "another model low · Context 93% left · $0.000"),
+        (
+            "a long input\nwrapped onto the next line",
+            "GPT-5.6-Sol high · Context 92% left · ⎇ h…",
+        ),
+    ] {
+        let screen = traex_context_composer("◆ Completed", prompt, footer);
+        let result = super::super::detect_agent(Some(Agent::Traex), &screen);
+        assert_eq!(result.state, AgentState::Idle, "{screen}");
+        assert!(result.visible_idle);
+        assert_eq!(
+            super::super::detect_agent(None, &screen).state,
+            AgentState::Unknown
+        );
+    }
+
+    let footer = "GPT-5.6-Sol high · Context 100% left · ⎇ herdr";
+    let ready = traex_context_composer("", "Find a bug", footer);
+    for screen in [
+        footer.to_string(),
+        format!("❯ Find a bug\n  {footer}"),
+        format!("────────────────\n  {footer}"),
+        ready.replace("❯ Find a bug\n", ""),
+        format!("{ready}user@host:~$ "),
+        traex_context_composer("model: loading", "Find a bug", "loading"),
+        traex_context_composer("", "Find a bug", "$0.000"),
+        traex_context_composer("", "Find a bug", "GPT-5.6-Sol high · Context 9…"),
+        traex_context_composer("", "Find a bug", "new unknown footer"),
+    ] {
+        let result = super::super::detect_agent(Some(Agent::Traex), &screen);
+        assert_eq!(result.state, AgentState::Unknown, "{screen}");
+        assert!(!result.visible_idle);
+    }
+
+    // Historical activity/approval text must not override the live composer.
+    let stale = traex_context_composer(
+        "◈ Working… (2s • esc to interrupt)\nWould you like to run the following command?\nYes, proceed\nenter confirm | esc cancel\n◆ Completed",
+        "Find a bug",
+        footer,
+    );
+    assert_eq!(
+        super::super::detect_agent(Some(Agent::Traex), &stale).state,
+        AgentState::Idle
+    );
+}
+
+#[test]
+fn traex_loaded_activity_controls_precede_context_composer() {
+    for status in [
+        "◈ Working… (4s • esc to interrupt) · 1 shell running… · /ps to manage",
+        "◇ Working… (6s • esc to interrupt)",
+        "❖ Working… (2s • esc to interrupt)",
+        "✦ Working… (3s • esc to interrupt)",
+        "◆ Working… (5s • esc to interrupt)",
+        "✧ Working… (9s • esc to interrupt)",
+        "◆ Running command… (10s • esc to interrupt) · 1 shell running… · /ps to manage",
+        "◆ Running command… (10s • esc to interrupt) · 1 shell running… · /ps to manage\n  └ Tip: Use /feedback to report\nissues.",
+        "◆ Working… (5s • esc to\ninterrupt) · 1 shell running… · /ps to\nmanage",
+    ] {
+        let screen = traex_context_composer(
+            status,
+            "Find a bug",
+            "GPT-5.6-Sol high · Context 93% left · /work…",
+        );
+        // No OSC available: exercise the actual rendered fallback.
+        let result = super::super::detect_agent(Some(Agent::Traex), &screen);
+        assert_eq!(result.state, AgentState::Working, "{screen}");
+        assert!(result.visible_working);
+        assert!(!result.visible_idle);
+    }
+
+    let ready = traex_context_composer("", "Find a bug", "model · Context 93% left");
+    assert_eq!(
+        super::super::detect_agent_with_osc(Some(Agent::Traex), &ready, "⠋ lab", "").state,
+        AgentState::Working
+    );
+    // Static titles are not sufficient; nor are future interrupt labels idle.
+    assert_eq!(
+        osc_explain(Agent::Traex, "", "herdr", "").state,
+        AgentState::Unknown
+    );
+    for status in [
+        "◆ Unknown activity (esc to interrupt)",
+        "◆ Unknown activity (esc to\ninterrupt) · new control\nwrapped continuation",
+    ] {
+        let future = traex_context_composer(status, "", "model · Context 93% left");
+        assert_eq!(
+            super::super::detect_agent(Some(Agent::Traex), &future).state,
+            AgentState::Unknown
+        );
+    }
+}
+
+#[test]
+fn traex_loaded_approval_and_question_panels_block_without_osc() {
+    for panel in [
+        "─────────────────────\n  Would you like to run the following command?\n  $ printf HERDR_PERMISSION_PROBE\n❯ 1. Yes, proceed (y)\n  5. No, and tell TraeCode CLI what to do differently (esc)\n  enter confirm  |  esc cancel\n",
+        "─────────────────────\n  Question 1/1 (1 unanswered)\n  Should the probe color be red or blue?\n  ❯ 1. Red (Recommended)\n    2. Blue\n  tab add notes  |  enter submit answer  |  esc interrupt\n",
+        "─────────────────────\n  Would you like to run the following\n  command?\n❯ 1. Yes, proceed (y)\n  enter confirm | esc cancel\n",
+        "─────────────────────\n  Question 1/1 (1 unanswered)\n  ❯ 1. Blue (Recommended)\n    2. Red\n  tab add notes | enter submit answer\n  esc interrupt\n",
+    ] {
+        let result = super::super::detect_agent(Some(Agent::Traex), panel);
+        assert_eq!(result.state, AgentState::Blocked);
+        assert!(result.visible_blocker);
+        let screen = format!("{panel}{}", traex_context_composer("◆ Completed", "", "model · Context 93% left"));
+        assert_eq!(super::super::detect_agent(Some(Agent::Traex), &screen).state, AgentState::Idle);
+    }
+}
+
 #[test]
 fn traex_manifest_matches_only_captured_terminal_states() {
     let idle = osc_explain(
