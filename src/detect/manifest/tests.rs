@@ -311,6 +311,70 @@ fn traex_context_composer(above: &str, prompt: &str, footer: &str) -> String {
     format!("{above}\n───────────────────────── lab ─\n{prompt_line}\n───────────────────────────────\n  {footer}\n")
 }
 
+fn traex_halfblock_composer(above: &str) -> String {
+    format!(
+        "{above}\n\n❯ Use /skills to list available skills\n{}",
+        "▀".repeat(219)
+    )
+}
+
+#[test]
+fn traex_halfblock_composer_replays_recorded_geometry() {
+    let screen = traex_halfblock_composer("服务保持运行…");
+    let result = explain(Agent::Traex, &screen);
+
+    assert_eq!(screen.lines().next_back().unwrap().chars().count(), 219);
+    assert_eq!(result.state, AgentState::Idle, "{screen}");
+    assert_eq!(
+        result.matched_rule.as_ref().map(|rule| rule.id.as_str()),
+        Some("halfblock_composer_idle")
+    );
+    assert!(result.visible_idle);
+}
+
+#[test]
+fn traex_halfblock_composer_preserves_active_and_blocked_precedence() {
+    let working = traex_halfblock_composer(
+        "◆ Working… (5s • esc to interrupt) · 1 shell running… · /ps to manage",
+    );
+    let without_osc = explain(Agent::Traex, &working);
+    assert_eq!(without_osc.state, AgentState::Working, "{working}");
+    assert_eq!(
+        without_osc
+            .matched_rule
+            .as_ref()
+            .map(|rule| rule.id.as_str()),
+        Some("composer_interrupt_working")
+    );
+    let with_osc = super::super::detect_agent_with_osc(
+        Some(Agent::Traex),
+        &traex_halfblock_composer(""),
+        "⠋ lab",
+        "",
+    );
+    assert_eq!(with_osc.state, AgentState::Working);
+
+    for panel in [
+        "─────────────────────\n  Would you like to run the following command?\n  $ printf HERDR_PERMISSION_PROBE\n❯ 1. Yes, proceed (y)\n  5. No, and tell TraeCode CLI what to do differently (esc)\n  enter confirm  |  esc cancel",
+        "─────────────────────\n  Question 1/1 (1 unanswered)\n  Should the probe color be red or blue?\n  ❯ 1. Red (Recommended)\n    2. Blue\n  tab add notes  |  enter submit answer  |  esc interrupt",
+    ] {
+        let blocked = traex_halfblock_composer(panel);
+        let result = explain(Agent::Traex, &blocked);
+        assert_eq!(result.state, AgentState::Blocked, "{blocked}");
+        assert!(result.visible_blocker);
+    }
+
+    let unknown_activity = traex_halfblock_composer("◆ Future activity… (5s • esc to interrupt)");
+    let result = explain(Agent::Traex, &unknown_activity);
+    assert_eq!(result.state, AgentState::Unknown, "{unknown_activity}");
+    assert!(!result.visible_idle);
+
+    let typed_prompt = format!("❯ Keep working\n{}", "▀".repeat(219));
+    let result = explain(Agent::Traex, &typed_prompt);
+    assert_eq!(result.state, AgentState::Unknown, "{typed_prompt}");
+    assert!(!result.visible_idle);
+}
+
 #[test]
 fn traex_loaded_context_composer_requires_live_structure() {
     for (prompt, footer) in [
