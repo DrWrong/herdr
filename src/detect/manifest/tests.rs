@@ -359,7 +359,7 @@ fn traex_halfblock_composer_preserves_active_and_blocked_precedence() {
             .matched_rule
             .as_ref()
             .map(|rule| rule.id.as_str()),
-        Some("composer_interrupt_working")
+        Some("current_interrupt_working")
     );
     let with_osc = super::super::detect_agent_with_osc(
         Some(Agent::Traex),
@@ -459,20 +459,18 @@ fn traex_loaded_context_composer_requires_live_structure() {
 }
 
 #[test]
-fn traex_loaded_activity_controls_precede_context_composer() {
+fn traex_current_interrupt_control_is_label_independent() {
     for status in [
         "◈ Working… (4s • esc to interrupt) · 1 shell running… · /ps to manage",
-        "◇ Working… (6s • esc to interrupt)",
-        "❖ Working… (2s • esc to interrupt)",
-        "✦ Working… (3s • esc to interrupt)",
-        "◆ Working… (5s • esc to interrupt)",
-        "✧ Working… (9s • esc to interrupt)",
-        "◆ Running command… (10s • esc to interrupt) · 1 shell running… · /ps to manage",
-        "◆ Waiting for command (10s • esc to interrupt) · 1 shell running… · /ps to manage",
-        "◆ Waiting for command… (10s • esc to interrupt) · 1 shell running… · /ps to manage",
-        "◆ Running command… (10s • esc to interrupt) · 1 shell running… · /ps to manage\n  └ Tip: Use /feedback to report\nissues.",
-        "◆ Working… (5s • esc to\ninterrupt) · 1 shell running… · /ps to\nmanage",
-        "◆ Waiting for command (5s • esc to\ninterrupt) · 1 shell running… · /ps to\nmanage",
+        "◇ Future phase 47 (6s • esc to interrupt)",
+        "❖ 等待外部服务 (2s • esc to interrupt)",
+        "✦ Esperando herramienta (3s • esc to interrupt)",
+        "◆ Überprüfung läuft (5s • esc to interrupt)",
+        "✧ 新しい処理状態 (9s • esc to interrupt)",
+        "◆\tPhase-with-punctuation: I/O? (10s • esc to interrupt) · new control",
+        "◆   Unknown activity (10s • esc to interrupt) · 1 shell running… · /ps to manage",
+        "◆ Label wraps before the\n  control line (10s • esc to interrupt) · extra control\n  wrapped continuation",
+        "◆ 状态文字也可能换行\n  并继续 (5s • esc   to\ninterrupt) · 1 shell running… · /ps to\nmanage",
     ] {
         let screen = traex_context_composer(
             status,
@@ -480,10 +478,20 @@ fn traex_loaded_activity_controls_precede_context_composer() {
             "GPT-5.6-Sol high · Context 93% left · /work…",
         );
         // No OSC available: exercise the actual rendered fallback.
-        let result = super::super::detect_agent(Some(Agent::Traex), &screen);
+        let result = explain(Agent::Traex, &screen);
         assert_eq!(result.state, AgentState::Working, "{screen}");
         assert!(result.visible_working);
         assert!(!result.visible_idle);
+        assert_eq!(
+            result.matched_rule.as_ref().map(|rule| rule.id.as_str()),
+            Some("current_interrupt_working"),
+            "{screen}"
+        );
+        assert_eq!(
+            super::super::detect_agent(None, &screen).state,
+            AgentState::Unknown,
+            "an unidentified process must not inherit TraeX activity: {screen}"
+        );
     }
 
     let captured_truncated = traex_context_composer(
@@ -501,22 +509,12 @@ fn traex_loaded_activity_controls_precede_context_composer() {
         super::super::detect_agent_with_osc(Some(Agent::Traex), &ready, "⠋ lab", "").state,
         AgentState::Working
     );
-    // Static titles are not sufficient. A current interrupt control is live
-    // activity even when TraeX introduces a label we do not know yet.
+    // Static titles are not sufficient. The current interrupt control, rather
+    // than any catalogue of status labels, is the visible activity authority.
     assert_eq!(
         osc_explain(Agent::Traex, "", "herdr", "").state,
         AgentState::Unknown
     );
-    for status in [
-        "◆ Unknown activity (esc to interrupt)",
-        "◆ Unknown activity (esc to\ninterrupt) · new control\nwrapped continuation",
-    ] {
-        let future = traex_context_composer(status, "", "model · Context 93% left");
-        assert_eq!(
-            super::super::detect_agent(Some(Agent::Traex), &future).state,
-            AgentState::Working
-        );
-    }
 }
 
 #[test]
@@ -560,6 +558,7 @@ fn traex_historic_activity_and_waits_do_not_override_current_composer() {
     for historic in [
         "◆ Waiting for command (20s • esc to interrupt) · 1 shell running… · /ps to manage\nWould you like to run the following command?\nYes, proceed\nenter confirm | esc cancel\n◆ Completed",
         "◆ ◆ Waiting for command (20s • esc to interrupt) · 1 shell running… · /ps to manage\n  Would you like to run the following command? Yes, proceed enter confirm | esc cancel",
+        "✦ Esperando herramienta (20s • esc to interrupt) · future controls\n◆ Completed",
     ] {
         let screen = traex_bordered_composer(historic, "next request", "anything", 52);
         let result = explain(Agent::Traex, &screen);
@@ -653,8 +652,10 @@ fn traex_manifest_matches_only_captured_terminal_states() {
     ] {
         let visible_working = explain(
             Agent::Traex,
-            &format!(
-                "{status_line}\n❯ Use /skills to list available skills\n  GPT-5.6-Sol m… ▰ Full Access (shift+tab to cycle)"
+            &traex_context_composer(
+                status_line,
+                "",
+                "GPT-5.6-Sol m… ▰ Full Access (shift+tab to cycle)",
             ),
         );
         assert_eq!(visible_working.state, AgentState::Working);
@@ -663,7 +664,7 @@ fn traex_manifest_matches_only_captured_terminal_states() {
                 .matched_rule
                 .as_ref()
                 .map(|rule| rule.id.as_str()),
-            Some("working_interrupt_hint")
+            Some("current_interrupt_working")
         );
     }
 

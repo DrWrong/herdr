@@ -62,25 +62,17 @@ region = "after_last_horizontal_rule"
 visible_blocker = true
 regex = ['Question \d+/\d+ \(\d+ unanswered\)', 'enter submit answer(?:\s*\|\s*|\s*\n\s*)esc interrupt(?:\s*\n❯ Use /skills to list available skills\n▀{3,})?\s*\z']
 
-# New animation frames and tool execution use the same interrupt control.
-# Only the current activity area immediately above the composer is
-# authoritative; old transcript text must not keep a completed turn busy.
-[[rules]]
-id = "composer_interrupt_working"
-state = "working"
-priority = 875
-region = "above_prompt_box"
-visible_working = true
-regex = ['(?:^|\n)[◈◇❖✦◆✧] (?:(?:Working|Running command)…|Waiting for command…?)\s+\([^)]*esc to\s+interrupt\)(?:\s*·\s*(?:\d+ shell running…|/ps to\s+manage))*(?:\s+└ Tip:[^\n]*(?:\n[^\n◆■▍❯─]*)*)?(?:\s*\n❯[^\n]*\n▀{3,})?\s*\z']
-
-# A current interrupt control is activity even when its label is new.
+# New animation frames, translated labels, and tool execution use the same
+# interrupt control. Only that current control immediately above the composer
+# is authoritative; status wording is incidental and old transcript text must
+# not keep a completed turn busy.
 [[rules]]
 id = "current_interrupt_working"
 state = "working"
 priority = 870
 region = "above_prompt_box"
 visible_working = true
-regex = ['(?:^|\n)[◈◇❖✦◆✧] [^◈◇❖✦◆✧\n]*\([^)]*esc to\s+interrupt\)(?:[^\n]*(?:\n[^\n◆■▍❯─]*)*)?(?:\s*\n❯[^\n]*\n▀{3,})?\s*\z']
+regex = ['(?:^|\n)[◈◇❖✦◆✧][ \t]+[^◈◇❖✦◆✧\n]*(?:\n[ \t]+[^\n◆■▍❯─]*)*\([^)]*esc\s+to\s+interrupt\)(?:[^\n]*(?:\n[^\n◆■▍❯─]*)*)?(?:\s*\n❯[^\n]*\n▀{3,})?\s*\z']
 
 # A complete bordered composer at the live tail is the idle authority after
 # current activity and user-action waits have been ruled out. Footer content,
@@ -106,15 +98,6 @@ priority = 858
 region = "bottom_non_empty_lines(12)"
 visible_idle = true
 regex = ['(?m)^❯[^\n]*\n▀{3,}\s*\z']
-
-# The visible fallback remains useful if a terminal strips OSC titles.
-[[rules]]
-id = "working_interrupt_hint"
-state = "working"
-priority = 850
-region = "whole_recent"
-visible_working = true
-line_regex = ['^[◈◇] Working… \([^)]*esc to interrupt\)(?: · .*)?$']
 
 # The composer footer is the captured idle surface. Working screens keep the
 # composer visible, so working controls must retain precedence.
