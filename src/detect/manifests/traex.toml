@@ -82,16 +82,17 @@ region = "above_prompt_box"
 regex = ['(?:^|\n)[^\n]*\([^)]*esc to\s+interrupt\)(?:[^\n]*(?:\n[^\n◆■▍❯─]*)*)?\s*\z']
 
 # TraeCode CLI's loaded composer replaced the permission-cycle footer with a
-# context meter. Require the complete bordered composer at the live tail,
-# not the meter, model name, title, cost, or version alone. Busy controls and
-# input panels above have precedence. Multiline user input is allowed.
+# context meter. Narrow panes truncate either the context suffix or the
+# permission hint; accept the captured combined suffix while still requiring
+# the complete bordered composer at the live tail. Busy controls and input
+# panels above have precedence. Multiline user input is allowed.
 [[rules]]
 id = "context_composer_idle"
 state = "idle"
 priority = 860
 region = "bottom_non_empty_lines(12)"
 visible_idle = true
-regex = ['(?m)^─{3,}[^\n]*\n❯(?: [^\n]*)?(?:\n[^\n]*)*\n─{3,}[^\n]*\n +[^\n]+ · Context \d{1,3}% left[^\n]*\s*\z']
+regex = ['(?m)^─{3,}[^\n]*\n❯(?: [^\n]*)?(?:\n[^\n]*)*\n─{3,}[^\n]*\n +[^\n]+ · Context \d{1,3}%(?: left[^\n]*|\s*…\s+▧ Workspace Edit)\s*\z']
 
 # The visible fallback remains useful if a terminal strips OSC titles.
 [[rules]]

@@ -312,6 +312,23 @@ fn traex_context_composer(above: &str, prompt: &str, footer: &str) -> String {
 }
 
 #[test]
+fn traex_loaded_context_composer_accepts_captured_truncated_footer() {
+    let screen = traex_context_composer(
+        "◆ 你好，宇航！今天想一起处理什么？",
+        "hello",
+        "GPT-5.6-Sol high · Context 95% … ▧ Workspace Edit",
+    );
+    let result = explain(Agent::Traex, &screen);
+
+    assert_eq!(result.state, AgentState::Idle, "{screen}");
+    assert!(result.visible_idle);
+    assert_eq!(
+        result.matched_rule.as_ref().map(|rule| rule.id.as_str()),
+        Some("context_composer_idle")
+    );
+}
+
+#[test]
 fn traex_loaded_context_composer_requires_live_structure() {
     for (prompt, footer) in [
         (
@@ -345,6 +362,12 @@ fn traex_loaded_context_composer_requires_live_structure() {
         traex_context_composer("model: loading", "Find a bug", "loading"),
         traex_context_composer("", "Find a bug", "$0.000"),
         traex_context_composer("", "Find a bug", "GPT-5.6-Sol high · Context 9…"),
+        traex_context_composer("", "Find a bug", "GPT-5.6-Sol high · Context 95% …"),
+        traex_context_composer(
+            "",
+            "Find a bug",
+            "GPT-5.6-Sol high · Context 95% … ▧ Full Access",
+        ),
         traex_context_composer("", "Find a bug", "new unknown footer"),
     ] {
         let result = super::super::detect_agent(Some(Agent::Traex), &screen);
@@ -388,6 +411,16 @@ fn traex_loaded_activity_controls_precede_context_composer() {
         assert!(result.visible_working);
         assert!(!result.visible_idle);
     }
+
+    let captured_truncated = traex_context_composer(
+        "◆ Working… (5s • esc to interrupt)",
+        "hello",
+        "GPT-5.6-Sol high · Context 95% … ▧ Workspace Edit",
+    );
+    let result = super::super::detect_agent(Some(Agent::Traex), &captured_truncated);
+    assert_eq!(result.state, AgentState::Working, "{captured_truncated}");
+    assert!(result.visible_working);
+    assert!(!result.visible_idle);
 
     let ready = traex_context_composer("", "Find a bug", "model · Context 93% left");
     assert_eq!(
