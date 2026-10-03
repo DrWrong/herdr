@@ -557,11 +557,15 @@ fn traex_current_composer_idle_is_footer_and_layout_independent() {
 
 #[test]
 fn traex_historic_activity_and_waits_do_not_override_current_composer() {
-    let historic = "◆ Waiting for command (20s • esc to interrupt) · 1 shell running… · /ps to manage\nWould you like to run the following command?\nYes, proceed\nenter confirm | esc cancel\n◆ Completed";
-    let screen = traex_bordered_composer(historic, "next request", "anything", 52);
-    let result = explain(Agent::Traex, &screen);
-    assert_eq!(result.state, AgentState::Idle, "{screen}");
-    assert!(result.visible_idle);
+    for historic in [
+        "◆ Waiting for command (20s • esc to interrupt) · 1 shell running… · /ps to manage\nWould you like to run the following command?\nYes, proceed\nenter confirm | esc cancel\n◆ Completed",
+        "◆ ◆ Waiting for command (20s • esc to interrupt) · 1 shell running… · /ps to manage\n  Would you like to run the following command? Yes, proceed enter confirm | esc cancel",
+    ] {
+        let screen = traex_bordered_composer(historic, "next request", "anything", 52);
+        let result = explain(Agent::Traex, &screen);
+        assert_eq!(result.state, AgentState::Idle, "{screen}");
+        assert!(result.visible_idle);
+    }
 }
 
 #[test]
