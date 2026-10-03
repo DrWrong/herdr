@@ -311,6 +311,21 @@ fn traex_context_composer(above: &str, prompt: &str, footer: &str) -> String {
     format!("{above}\n───────────────────────── lab ─\n{prompt_line}\n───────────────────────────────\n  {footer}\n")
 }
 
+fn traex_bordered_composer(above: &str, prompt: &str, footer: &str, width: usize) -> String {
+    let prompt_line = if prompt.is_empty() {
+        "❯".to_string()
+    } else {
+        format!("❯ {prompt}")
+    };
+    let border = "─".repeat(width);
+    let footer = if footer.is_empty() {
+        String::new()
+    } else {
+        format!("\n  {footer}")
+    };
+    format!("{above}\n{border}\n{prompt_line}\n{border}{footer}\n")
+}
+
 fn traex_halfblock_composer(above: &str) -> String {
     format!(
         "{above}\n\n❯ Use /skills to list available skills\n{}",
@@ -344,7 +359,7 @@ fn traex_halfblock_composer_preserves_active_and_blocked_precedence() {
             .matched_rule
             .as_ref()
             .map(|rule| rule.id.as_str()),
-        Some("composer_interrupt_working")
+        Some("current_interrupt_working")
     );
     let with_osc = super::super::detect_agent_with_osc(
         Some(Agent::Traex),
@@ -366,13 +381,13 @@ fn traex_halfblock_composer_preserves_active_and_blocked_precedence() {
 
     let unknown_activity = traex_halfblock_composer("◆ Future activity… (5s • esc to interrupt)");
     let result = explain(Agent::Traex, &unknown_activity);
-    assert_eq!(result.state, AgentState::Unknown, "{unknown_activity}");
-    assert!(!result.visible_idle);
+    assert_eq!(result.state, AgentState::Working, "{unknown_activity}");
+    assert!(result.visible_working);
 
     let typed_prompt = format!("❯ Keep working\n{}", "▀".repeat(219));
     let result = explain(Agent::Traex, &typed_prompt);
-    assert_eq!(result.state, AgentState::Unknown, "{typed_prompt}");
-    assert!(!result.visible_idle);
+    assert_eq!(result.state, AgentState::Idle, "{typed_prompt}");
+    assert!(result.visible_idle);
 }
 
 #[test]
@@ -388,7 +403,7 @@ fn traex_loaded_context_composer_accepts_captured_truncated_footer() {
     assert!(result.visible_idle);
     assert_eq!(
         result.matched_rule.as_ref().map(|rule| rule.id.as_str()),
-        Some("context_composer_idle")
+        Some("current_composer_idle")
     );
 }
 
@@ -404,6 +419,8 @@ fn traex_loaded_context_composer_requires_live_structure() {
             "a long input\nwrapped onto the next line",
             "GPT-5.6-Sol high · Context 92% left · ⎇ h…",
         ),
+        ("typed but not submitted", "new unknown footer"),
+        ("", ""),
     ] {
         let screen = traex_context_composer("◆ Completed", prompt, footer);
         let result = super::super::detect_agent(Some(Agent::Traex), &screen);
@@ -423,16 +440,6 @@ fn traex_loaded_context_composer_requires_live_structure() {
         format!("────────────────\n  {footer}"),
         ready.replace("❯ Find a bug\n", ""),
         format!("{ready}user@host:~$ "),
-        traex_context_composer("model: loading", "Find a bug", "loading"),
-        traex_context_composer("", "Find a bug", "$0.000"),
-        traex_context_composer("", "Find a bug", "GPT-5.6-Sol high · Context 9…"),
-        traex_context_composer("", "Find a bug", "GPT-5.6-Sol high · Context 95% …"),
-        traex_context_composer(
-            "",
-            "Find a bug",
-            "GPT-5.6-Sol high · Context 95% … ▧ Full Access",
-        ),
-        traex_context_composer("", "Find a bug", "new unknown footer"),
     ] {
         let result = super::super::detect_agent(Some(Agent::Traex), &screen);
         assert_eq!(result.state, AgentState::Unknown, "{screen}");
@@ -452,17 +459,18 @@ fn traex_loaded_context_composer_requires_live_structure() {
 }
 
 #[test]
-fn traex_loaded_activity_controls_precede_context_composer() {
+fn traex_current_interrupt_control_is_label_independent() {
     for status in [
         "◈ Working… (4s • esc to interrupt) · 1 shell running… · /ps to manage",
-        "◇ Working… (6s • esc to interrupt)",
-        "❖ Working… (2s • esc to interrupt)",
-        "✦ Working… (3s • esc to interrupt)",
-        "◆ Working… (5s • esc to interrupt)",
-        "✧ Working… (9s • esc to interrupt)",
-        "◆ Running command… (10s • esc to interrupt) · 1 shell running… · /ps to manage",
-        "◆ Running command… (10s • esc to interrupt) · 1 shell running… · /ps to manage\n  └ Tip: Use /feedback to report\nissues.",
-        "◆ Working… (5s • esc to\ninterrupt) · 1 shell running… · /ps to\nmanage",
+        "◇ Future phase 47 (6s • esc to interrupt)",
+        "❖ 等待外部服务 (2s • esc to interrupt)",
+        "✦ Esperando herramienta (3s • esc to interrupt)",
+        "◆ Überprüfung läuft (5s • esc to interrupt)",
+        "✧ 新しい処理状態 (9s • esc to interrupt)",
+        "◆\tPhase-with-punctuation: I/O? (10s • esc to interrupt) · new control",
+        "◆   Unknown activity (10s • esc to interrupt) · 1 shell running… · /ps to manage",
+        "◆ Label wraps before the\n  control line (10s • esc to interrupt) · extra control\n  wrapped continuation",
+        "◆ 状态文字也可能换行\n  并继续 (5s • esc   to\ninterrupt) · 1 shell running… · /ps to\nmanage",
     ] {
         let screen = traex_context_composer(
             status,
@@ -470,10 +478,20 @@ fn traex_loaded_activity_controls_precede_context_composer() {
             "GPT-5.6-Sol high · Context 93% left · /work…",
         );
         // No OSC available: exercise the actual rendered fallback.
-        let result = super::super::detect_agent(Some(Agent::Traex), &screen);
+        let result = explain(Agent::Traex, &screen);
         assert_eq!(result.state, AgentState::Working, "{screen}");
         assert!(result.visible_working);
         assert!(!result.visible_idle);
+        assert_eq!(
+            result.matched_rule.as_ref().map(|rule| rule.id.as_str()),
+            Some("current_interrupt_working"),
+            "{screen}"
+        );
+        assert_eq!(
+            super::super::detect_agent(None, &screen).state,
+            AgentState::Unknown,
+            "an unidentified process must not inherit TraeX activity: {screen}"
+        );
     }
 
     let captured_truncated = traex_context_composer(
@@ -491,20 +509,61 @@ fn traex_loaded_activity_controls_precede_context_composer() {
         super::super::detect_agent_with_osc(Some(Agent::Traex), &ready, "⠋ lab", "").state,
         AgentState::Working
     );
-    // Static titles are not sufficient; nor are future interrupt labels idle.
+    // Static titles are not sufficient. The current interrupt control, rather
+    // than any catalogue of status labels, is the visible activity authority.
     assert_eq!(
         osc_explain(Agent::Traex, "", "herdr", "").state,
         AgentState::Unknown
     );
-    for status in [
-        "◆ Unknown activity (esc to interrupt)",
-        "◆ Unknown activity (esc to\ninterrupt) · new control\nwrapped continuation",
+}
+
+#[test]
+fn traex_current_composer_idle_is_footer_and_layout_independent() {
+    for (width, prompt, footer) in [
+        (20, "", ""),
+        (38, "typed but not submitted", "new model · unknown footer"),
+        (
+            120,
+            "first line\nwrapped second line",
+            "permission text changed again",
+        ),
     ] {
-        let future = traex_context_composer(status, "", "model · Context 93% left");
+        let screen = traex_bordered_composer("◆ Completed", prompt, footer, width);
+        let result = explain(Agent::Traex, &screen);
+        assert_eq!(result.state, AgentState::Idle, "{screen}");
+        assert!(result.visible_idle, "{screen}");
         assert_eq!(
-            super::super::detect_agent(Some(Agent::Traex), &future).state,
-            AgentState::Unknown
+            result.matched_rule.as_ref().map(|rule| rule.id.as_str()),
+            Some("current_composer_idle")
         );
+    }
+
+    let typed_halfblock = format!(
+        "◆ Completed\n\n❯ typed but not submitted\n{}",
+        "▀".repeat(37)
+    );
+    let result = explain(Agent::Traex, &typed_halfblock);
+    assert_eq!(result.state, AgentState::Idle, "{typed_halfblock}");
+    assert!(result.visible_idle);
+
+    for unreadable in ["", "◆ Completed", "ordinary transcript without a composer"] {
+        let result = explain(Agent::Traex, unreadable);
+        assert_eq!(result.state, AgentState::Unknown, "{unreadable:?}");
+        assert!(!result.visible_idle);
+    }
+}
+
+#[test]
+fn traex_historic_activity_and_waits_do_not_override_current_composer() {
+    for historic in [
+        "◆ Waiting for command (20s • esc to interrupt) · 1 shell running… · /ps to manage\nWould you like to run the following command?\nYes, proceed\nenter confirm | esc cancel\n◆ Completed",
+        "◆ ◆ Waiting for command (20s • esc to interrupt) · 1 shell running… · /ps to manage\n  Would you like to run the following command? Yes, proceed enter confirm | esc cancel",
+        "✦ Esperando herramienta (20s • esc to interrupt) · future controls\n◆ Completed",
+    ] {
+        let screen = traex_bordered_composer(historic, "next request", "anything", 52);
+        let result = explain(Agent::Traex, &screen);
+        assert_eq!(result.state, AgentState::Idle, "{screen}");
+        assert!(result.visible_idle);
     }
 }
 
@@ -535,7 +594,7 @@ fn traex_manifest_matches_only_captured_terminal_states() {
     assert_eq!(idle.state, AgentState::Idle);
     assert_eq!(
         idle.matched_rule.as_ref().map(|rule| rule.id.as_str()),
-        Some("full_access_composer_idle")
+        Some("current_composer_idle")
     );
     assert!(idle.visible_idle);
 
@@ -549,7 +608,7 @@ fn traex_manifest_matches_only_captured_terminal_states() {
             .matched_rule
             .as_ref()
             .map(|rule| rule.id.as_str()),
-        Some("full_access_composer_idle")
+        Some("current_composer_idle")
     );
     assert!(workspace_edit_idle.visible_idle);
 
@@ -563,12 +622,12 @@ fn traex_manifest_matches_only_captured_terminal_states() {
                 "TRAE CLI Next (v0.200.19)\n────────────────────────\n❯ Use /skills to list available skills\n────────────────────────\n  {footer}"
             ),
         );
-        assert_eq!(no_hint.state, AgentState::Unknown);
+        assert_eq!(no_hint.state, AgentState::Idle);
         assert_eq!(
             no_hint.matched_rule.as_ref().map(|rule| rule.id.as_str()),
-            Some("unobserved_screen_unknown")
+            Some("current_composer_idle")
         );
-        assert!(!no_hint.visible_idle);
+        assert!(no_hint.visible_idle);
     }
 
     let osc_working = osc_explain(
@@ -593,8 +652,10 @@ fn traex_manifest_matches_only_captured_terminal_states() {
     ] {
         let visible_working = explain(
             Agent::Traex,
-            &format!(
-                "{status_line}\n❯ Use /skills to list available skills\n  GPT-5.6-Sol m… ▰ Full Access (shift+tab to cycle)"
+            &traex_context_composer(
+                status_line,
+                "",
+                "GPT-5.6-Sol m… ▰ Full Access (shift+tab to cycle)",
             ),
         );
         assert_eq!(visible_working.state, AgentState::Working);
@@ -603,20 +664,22 @@ fn traex_manifest_matches_only_captured_terminal_states() {
                 .matched_rule
                 .as_ref()
                 .map(|rule| rule.id.as_str()),
-            Some("working_interrupt_hint")
+            Some("current_interrupt_working")
         );
     }
 
-    let trust = explain(
-        Agent::Traex,
+    for trust_prompt in [
         "Do you trust the contents of this directory?\n❯ 1. Yes, continue\n  2. No, quit\nPress enter to continue",
-    );
-    assert_eq!(trust.state, AgentState::Blocked);
-    assert_eq!(
-        trust.matched_rule.as_ref().map(|rule| rule.id.as_str()),
-        Some("directory_trust_prompt")
-    );
-    assert!(trust.visible_blocker);
+        "Folder access\n/task/fixture\nDo you trust the contents of this directory? Working with untrusted contents comes with higher risk of prompt injection.\n❯ 1. Yes, continue\n  2. No, quit\nenter continue  |  esc quit",
+    ] {
+        let trust = explain(Agent::Traex, trust_prompt);
+        assert_eq!(trust.state, AgentState::Blocked, "{trust_prompt}");
+        assert_eq!(
+            trust.matched_rule.as_ref().map(|rule| rule.id.as_str()),
+            Some("directory_trust_prompt")
+        );
+        assert!(trust.visible_blocker);
+    }
 
     let alias_migration = explain(
         Agent::Traex,

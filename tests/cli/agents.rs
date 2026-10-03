@@ -316,7 +316,7 @@ fn traex_identity_manifest_and_api_surfaces_work_end_to_end() {
     let explained: serde_json::Value = serde_json::from_slice(&explained.stdout).unwrap();
     assert_eq!(explained["agent"], "traex");
     assert_eq!(explained["state"], "idle");
-    assert_eq!(explained["matched_rule"]["id"], "full_access_composer_idle");
+    assert_eq!(explained["matched_rule"]["id"], "current_composer_idle");
     assert_eq!(explained["manifest_version"], "2026.09.30.1");
 
     let split = run_cli_json(
