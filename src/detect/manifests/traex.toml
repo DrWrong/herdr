@@ -1,5 +1,5 @@
 id = "traex"
-version = "2026.10.04.1"
+version = "2026.10.04.2"
 min_engine_version = 1
 updated_at = "2026-10-04T00:00:00Z"
 aliases = ["traecli"]
@@ -52,7 +52,7 @@ priority = 980
 region = "after_last_horizontal_rule"
 visible_blocker = true
 contains = ["Yes, proceed"]
-regex = ['Would\s+you\s+like\s+to\s+run\s+the\s+following\s+command\?', 'enter confirm\s*\|\s*esc cancel(?:\s*\n❯ Use /skills to list available skills\n▀{3,})?\s*\z']
+regex = ['Would\s+you\s+like\s+to\s+run\s+the\s+following\s+command\?', 'enter confirm\s*\|\s*esc cancel(?:\s*\n❯[^\n]*(?:\n[^\n]*)*)?\s*\z']
 
 [[rules]]
 id = "question_input"
@@ -60,7 +60,7 @@ state = "blocked"
 priority = 975
 region = "after_last_horizontal_rule"
 visible_blocker = true
-regex = ['Question \d+/\d+ \(\d+ unanswered\)', 'enter submit answer(?:\s*\|\s*|\s*\n\s*)esc interrupt(?:\s*\n❯ Use /skills to list available skills\n▀{3,})?\s*\z']
+regex = ['Question \d+/\d+ \(\d+ unanswered\)', 'enter submit answer(?:\s*\|\s*|\s*\n\s*)esc interrupt(?:\s*\n❯[^\n]*(?:\n[^\n]*)*)?\s*\z']
 
 # New animation frames, translated labels, and tool execution use the same
 # interrupt control. Only that current control immediately above the composer
@@ -72,7 +72,7 @@ state = "working"
 priority = 870
 region = "above_prompt_box"
 visible_working = true
-regex = ['(?:^|\n)[◈◇❖✦◆✧][ \t]+[^◈◇❖✦◆✧\n]*(?:\n[ \t]+[^\n◆■▍❯─]*)*\([^)]*esc\s+to\s+interrupt\)(?:[^\n]*(?:\n[^\n◆■▍❯─]*)*)?(?:\s*\n❯[^\n]*(?:\n[^\n]*)*)?\s*\z']
+regex = ['(?:^|\n)[◈◇❖✦◆✧][ \t]+[^◈◇❖✦◆✧\n]*(?:\n[ \t]+[^\n◆■▍❯─]*)*\([^)]*esc\s+to\s+interrupt\)[^\n]*(?:\n(?:[ \t]+|·[ \t]+)[^\n◆■▍❯─]*)*(?:\s*\n❯[^\n]*(?:\n[^\n]*)*)?\s*\z']
 
 # An unavailable observation is not evidence that the activity bar is absent.
 [[rules]]

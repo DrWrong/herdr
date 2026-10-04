@@ -317,7 +317,7 @@ fn traex_identity_manifest_and_api_surfaces_work_end_to_end() {
     assert_eq!(explained["agent"], "traex");
     assert_eq!(explained["state"], "idle");
     assert_eq!(explained["matched_rule"]["id"], "observed_screen_idle");
-    assert_eq!(explained["manifest_version"], "2026.10.04.1");
+    assert_eq!(explained["manifest_version"], "2026.10.04.2");
 
     let split = run_cli_json(
         &socket_path,

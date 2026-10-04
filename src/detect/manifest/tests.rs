@@ -377,10 +377,17 @@ fn traex_halfblock_composer_preserves_active_and_blocked_precedence() {
         "─────────────────────\n  Would you like to run the following command?\n  $ printf HERDR_PERMISSION_PROBE\n❯ 1. Yes, proceed (y)\n  5. No, and tell TraeCode CLI what to do differently (esc)\n  enter confirm  |  esc cancel",
         "─────────────────────\n  Question 1/1 (1 unanswered)\n  Should the probe color be red or blue?\n  ❯ 1. Red (Recommended)\n    2. Blue\n  tab add notes  |  enter submit answer  |  esc interrupt",
     ] {
-        let blocked = traex_halfblock_composer(panel);
-        let result = explain(Agent::Traex, &blocked);
-        assert_eq!(result.state, AgentState::Blocked, "{blocked}");
-        assert!(result.visible_blocker);
+        for blocked in [
+            traex_halfblock_composer(panel),
+            traex_halfblock_composer_with_footer(
+                panel,
+                "changed model · wrapped path\n  permission footer changed · ← for agents",
+            ),
+        ] {
+            let result = explain(Agent::Traex, &blocked);
+            assert_eq!(result.state, AgentState::Blocked, "{blocked}");
+            assert!(result.visible_blocker, "{blocked}");
+        }
     }
 
     let unknown_activity = traex_halfblock_composer("◆ Future activity… (5s • esc to interrupt)");
@@ -492,7 +499,7 @@ fn traex_current_interrupt_control_is_label_independent() {
         "◆\tPhase-with-punctuation: I/O? (10s • esc to interrupt) · new control",
         "◆   Unknown activity (10s • esc to interrupt) · 1 shell running… · /ps to manage",
         "◆ Label wraps before the\n  control line (10s • esc to interrupt) · extra control\n  wrapped continuation",
-        "◆ 状态文字也可能换行\n  并继续 (5s • esc   to\ninterrupt) · 1 shell running… · /ps to\nmanage",
+        "◆ 状态文字也可能换行\n  并继续 (5s • esc   to\ninterrupt) · 1 shell running… · /ps to\n  manage",
     ] {
         let screen = traex_context_composer(
             status,
@@ -619,6 +626,18 @@ fn traex_historic_activity_and_waits_do_not_override_current_composer() {
         assert_eq!(result.state, AgentState::Idle, "{screen}");
         assert!(result.visible_idle);
     }
+
+    let stale_hybrid = traex_halfblock_composer_with_footer(
+        "◆ Working… (2s • esc to interrupt)\nordinary completed response",
+        "changed model · path · permission",
+    );
+    let result = explain(Agent::Traex, &stale_hybrid);
+    assert_eq!(result.state, AgentState::Idle, "{stale_hybrid}");
+    assert!(result.visible_idle, "{stale_hybrid}");
+    assert_eq!(
+        result.matched_rule.as_ref().map(|rule| rule.id.as_str()),
+        Some("observed_screen_idle")
+    );
 }
 
 #[test]
