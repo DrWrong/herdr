@@ -74,49 +74,21 @@ region = "above_prompt_box"
 visible_working = true
 regex = ['(?:^|\n)[◈◇❖✦◆✧][ \t]+[^◈◇❖✦◆✧\n]*(?:\n[ \t]+[^\n◆■▍❯─]*)*\([^)]*esc\s+to\s+interrupt\)(?:[^\n]*(?:\n[^\n◆■▍❯─]*)*)?(?:\s*\n❯[^\n]*\n▀{3,})?\s*\z']
 
-# A complete bordered composer at the live tail is the idle authority after
-# current activity and user-action waits have been ruled out. Footer content,
-# model names, context meters, permissions, pane width and multiline input are
-# deliberately incidental. Indented footer rows are allowed; a shell prompt or
-# other unowned tail is not.
+# An unavailable observation is not evidence that the activity bar is absent.
 [[rules]]
-id = "current_composer_idle"
-state = "idle"
-priority = 860
-region = "bottom_non_empty_lines(12)"
-visible_idle = true
-regex = ['(?m)^─{3,}[^\n]*\n❯[^\n]*(?:\n[^\n─][^\n]*)*\n─{3,}[^\n]*(?:\n {2,}[^\n]*)*\s*\z']
-
-# Captured from a loaded TraeCode CLI 0.207.1 pane at 219 columns. This
-# alternate composer has no footer. The prompt contents are incidental; the
-# half-block tail owns the current composer boundary. Active controls and input
-# panels above retain precedence.
-[[rules]]
-id = "halfblock_composer_idle"
-state = "idle"
-priority = 858
-region = "bottom_non_empty_lines(12)"
-visible_idle = true
-regex = ['(?m)^❯[^\n]*\n▀{3,}\s*\z']
-
-# The composer footer is the captured idle surface. Working screens keep the
-# composer visible, so working controls must retain precedence.
-[[rules]]
-id = "full_access_composer_idle"
-state = "idle"
-priority = 500
-region = "bottom_non_empty_lines(3)"
-visible_idle = true
-line_regex = [
-  '^❯ ',
-  '^.*(?:▰ Full Access|◐ Workspace Edit) \(shift\+tab to cycle\)$',
-]
-
-# Known agents normally inherit a generic idle fallback. Traex stays unknown
-# unless one of the captured states above matches.
-[[rules]]
-id = "unobserved_screen_unknown"
+id = "unavailable_screen_unknown"
 state = "unknown"
-priority = 1
+priority = 20
 region = "whole_recent"
-regex = ['(?s).*']
+regex = ['(?s)^\s*$']
+
+# Once a live TraeX process has a non-empty current screen, the absence of a
+# higher-priority activity or user-input control is the ordinary idle signal.
+# Composer chrome and the fixed model/path/permission footer are incidental.
+[[rules]]
+id = "observed_screen_idle"
+state = "idle"
+priority = 10
+region = "whole_recent"
+visible_idle = true
+regex = ['(?s)\S']

@@ -342,7 +342,7 @@ fn traex_halfblock_composer_replays_recorded_geometry() {
     assert_eq!(result.state, AgentState::Idle, "{screen}");
     assert_eq!(
         result.matched_rule.as_ref().map(|rule| rule.id.as_str()),
-        Some("halfblock_composer_idle")
+        Some("observed_screen_idle")
     );
     assert!(result.visible_idle);
 }
@@ -403,12 +403,12 @@ fn traex_loaded_context_composer_accepts_captured_truncated_footer() {
     assert!(result.visible_idle);
     assert_eq!(
         result.matched_rule.as_ref().map(|rule| rule.id.as_str()),
-        Some("current_composer_idle")
+        Some("observed_screen_idle")
     );
 }
 
 #[test]
-fn traex_loaded_context_composer_requires_live_structure() {
+fn traex_loaded_context_composer_is_not_required_for_live_idle() {
     for (prompt, footer) in [
         (
             "Find and fix a bug in @filename",
@@ -442,8 +442,8 @@ fn traex_loaded_context_composer_requires_live_structure() {
         format!("{ready}user@host:~$ "),
     ] {
         let result = super::super::detect_agent(Some(Agent::Traex), &screen);
-        assert_eq!(result.state, AgentState::Unknown, "{screen}");
-        assert!(!result.visible_idle);
+        assert_eq!(result.state, AgentState::Idle, "{screen}");
+        assert!(result.visible_idle);
     }
 
     // Historical activity/approval text must not override the live composer.
@@ -518,7 +518,7 @@ fn traex_current_interrupt_control_is_label_independent() {
 }
 
 #[test]
-fn traex_current_composer_idle_is_footer_and_layout_independent() {
+fn traex_observed_idle_is_footer_and_layout_independent() {
     for (width, prompt, footer) in [
         (20, "", ""),
         (38, "typed but not submitted", "new model · unknown footer"),
@@ -534,7 +534,7 @@ fn traex_current_composer_idle_is_footer_and_layout_independent() {
         assert!(result.visible_idle, "{screen}");
         assert_eq!(
             result.matched_rule.as_ref().map(|rule| rule.id.as_str()),
-            Some("current_composer_idle")
+            Some("observed_screen_idle")
         );
     }
 
@@ -546,11 +546,43 @@ fn traex_current_composer_idle_is_footer_and_layout_independent() {
     assert_eq!(result.state, AgentState::Idle, "{typed_halfblock}");
     assert!(result.visible_idle);
 
-    for unreadable in ["", "◆ Completed", "ordinary transcript without a composer"] {
+    for unreadable in ["", "   \n\t"] {
         let result = explain(Agent::Traex, unreadable);
         assert_eq!(result.state, AgentState::Unknown, "{unreadable:?}");
         assert!(!result.visible_idle);
     }
+}
+
+#[test]
+fn traex_live_screen_without_current_activity_is_idle() {
+    let captured_tail = format!(
+        "{} Define herdr agent instructions ▄\n❯ Explain this codebase\n{}\n  GPT-5.6-Luna medium · Context 63% left · ⎇ herdr · /data00/home/chengyuhang/.treehouse/herdr-8a0084/1/herdr · No committed line changes                              ☢ Full Access (shift+tab to cycle) · ← for agents\n",
+        "▄".repeat(219),
+        "▀".repeat(219),
+    );
+
+    for screen in [
+        captured_tail,
+        "◆ Completed\n❯ next\n▀▀▀▀▀▀▀▀▀▀▀\n  a completely different footer".to_string(),
+        "◆ Completed\n❯ next\n▀▀▀▀▀▀▀▀▀▀▀".to_string(),
+        "◆ Completed\n❯ next\n▀▀▀▀▀▀▀▀▀▀▀\n  model · a wrapped footer\n  path · permission changed"
+            .to_string(),
+        "◆ Completed\ncurrent composer chrome changed".to_string(),
+        "historic ◈ Working… (20s • esc to interrupt)\n◆ Completed\ncurrent transcript".to_string(),
+    ] {
+        let result = explain(Agent::Traex, &screen);
+        assert_eq!(result.state, AgentState::Idle, "{screen}");
+        assert!(result.visible_idle, "{screen}");
+        assert_eq!(
+            result.matched_rule.as_ref().map(|rule| rule.id.as_str()),
+            Some("observed_screen_idle"),
+            "{screen}"
+        );
+    }
+
+    let unidentified = super::super::detect_agent(None, "◆ Completed\ncurrent transcript");
+    assert_eq!(unidentified.state, AgentState::Unknown);
+    assert!(!unidentified.visible_idle);
 }
 
 #[test]
@@ -594,7 +626,7 @@ fn traex_manifest_matches_only_captured_terminal_states() {
     assert_eq!(idle.state, AgentState::Idle);
     assert_eq!(
         idle.matched_rule.as_ref().map(|rule| rule.id.as_str()),
-        Some("current_composer_idle")
+        Some("observed_screen_idle")
     );
     assert!(idle.visible_idle);
 
@@ -608,7 +640,7 @@ fn traex_manifest_matches_only_captured_terminal_states() {
             .matched_rule
             .as_ref()
             .map(|rule| rule.id.as_str()),
-        Some("current_composer_idle")
+        Some("observed_screen_idle")
     );
     assert!(workspace_edit_idle.visible_idle);
 
@@ -625,7 +657,7 @@ fn traex_manifest_matches_only_captured_terminal_states() {
         assert_eq!(no_hint.state, AgentState::Idle);
         assert_eq!(
             no_hint.matched_rule.as_ref().map(|rule| rule.id.as_str()),
-            Some("current_composer_idle")
+            Some("observed_screen_idle")
         );
         assert!(no_hint.visible_idle);
     }
@@ -694,19 +726,16 @@ fn traex_manifest_matches_only_captured_terminal_states() {
         Some("alias_migration_prompt")
     );
 
-    let unobserved = explain(Agent::Traex, "an unobserved Traex surface");
-    assert_eq!(unobserved.state, AgentState::Unknown);
+    let observed = explain(Agent::Traex, "an observed Traex surface");
+    assert_eq!(observed.state, AgentState::Idle);
     assert_eq!(
-        unobserved
-            .matched_rule
-            .as_ref()
-            .map(|rule| rule.id.as_str()),
-        Some("unobserved_screen_unknown")
+        observed.matched_rule.as_ref().map(|rule| rule.id.as_str()),
+        Some("observed_screen_idle")
     );
-    assert_eq!(unobserved.fallback_reason, None);
-    assert!(!unobserved.visible_idle);
-    assert!(!unobserved.visible_working);
-    assert!(!unobserved.visible_blocker);
+    assert_eq!(observed.fallback_reason, None);
+    assert!(observed.visible_idle);
+    assert!(!observed.visible_working);
+    assert!(!observed.visible_blocker);
 }
 
 #[test]
