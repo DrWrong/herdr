@@ -1,5 +1,5 @@
 id = "traex"
-version = "2026.10.04.2"
+version = "2026.10.04.3"
 min_engine_version = 1
 updated_at = "2026-10-04T00:00:00Z"
 aliases = ["traecli"]
@@ -72,7 +72,7 @@ state = "working"
 priority = 870
 region = "above_prompt_box"
 visible_working = true
-regex = ['(?:^|\n)[◈◇❖✦◆✧][ \t]+[^◈◇❖✦◆✧\n]*(?:\n[ \t]+[^\n◆■▍❯─]*)*\([^)]*esc\s+to\s+interrupt\)[^\n]*(?:\n(?:[ \t]+|·[ \t]+)[^\n◆■▍❯─]*)*(?:\s*\n❯[^\n]*(?:\n[^\n]*)*)?\s*\z']
+regex = ['(?:^|\n)[\p{P}\p{S}][ \t]+[\p{L}\p{N}][^\n]*(?:\n[ \t]+[^\n◆■▍❯─]*)*\([^)]*esc\s+to\s+interrupt\)[^\n]*(?:\n(?:[ \t]+|·[ \t]+)[^\n◆■▍❯─]*)*(?:\s*\n❯[^\n]*(?:\n[^\n]*)*)?\s*\z']
 
 # An unavailable observation is not evidence that the activity bar is absent.
 [[rules]]

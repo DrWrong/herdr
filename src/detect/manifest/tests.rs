@@ -547,6 +547,42 @@ fn traex_current_interrupt_control_is_label_independent() {
 }
 
 #[test]
+fn traex_captured_current_activity_control_is_structural() {
+    // Exact current tail captured from TraeCode CLI 0.207.1 in the final named
+    // lab. The diamond frame was not among the previously observed frames.
+    let active = "▍ anything else.\n\n\n⋄ Working… (3s • esc to interrupt)\n──────────────────────────────── Start conversation ─\n❯ Improve documentation in @filename\n─────────────────────────────────────────────────────\n  GPT-5.6-Sol high… ▧ Workspace Edit · ← for agents\n";
+    let result = explain(Agent::Traex, active);
+    assert_eq!(result.state, AgentState::Working, "{active}");
+    assert!(result.visible_working, "{active}");
+    assert_eq!(
+        result.matched_rule.as_ref().map(|rule| rule.id.as_str()),
+        Some("current_interrupt_working")
+    );
+
+    // The same captured control is historical once ordinary response text is
+    // below it; only the block immediately adjacent to the composer is live.
+    let historical = active.replace(
+        "⋄ Working… (3s • esc to interrupt)\n",
+        "⋄ Working… (3s • esc to interrupt)\nordinary completed response\n",
+    );
+    let result = explain(Agent::Traex, &historical);
+    assert_eq!(result.state, AgentState::Idle, "{historical}");
+    assert!(result.visible_idle, "{historical}");
+    assert_eq!(
+        result.matched_rule.as_ref().map(|rule| rule.id.as_str()),
+        Some("observed_screen_idle")
+    );
+
+    let settled = active.replace(
+        "⋄ Working… (3s • esc to interrupt)",
+        "◆ Ran sleep 15; printf 'TRAE_POST_REVIEW_DONE\\n'\n  └ TRAE_POST_REVIEW_DONE",
+    );
+    let result = explain(Agent::Traex, &settled);
+    assert_eq!(result.state, AgentState::Idle, "{settled}");
+    assert!(result.visible_idle, "{settled}");
+}
+
+#[test]
 fn traex_observed_idle_is_footer_and_layout_independent() {
     for (width, prompt, footer) in [
         (20, "", ""),
