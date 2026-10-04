@@ -333,6 +333,10 @@ fn traex_halfblock_composer(above: &str) -> String {
     )
 }
 
+fn traex_halfblock_composer_with_footer(above: &str, footer: &str) -> String {
+    format!("{}\n  {footer}", traex_halfblock_composer(above))
+}
+
 #[test]
 fn traex_halfblock_composer_replays_recorded_geometry() {
     let screen = traex_halfblock_composer("服务保持运行…");
@@ -342,7 +346,7 @@ fn traex_halfblock_composer_replays_recorded_geometry() {
     assert_eq!(result.state, AgentState::Idle, "{screen}");
     assert_eq!(
         result.matched_rule.as_ref().map(|rule| rule.id.as_str()),
-        Some("halfblock_composer_idle")
+        Some("observed_screen_idle")
     );
     assert!(result.visible_idle);
 }
@@ -373,16 +377,41 @@ fn traex_halfblock_composer_preserves_active_and_blocked_precedence() {
         "─────────────────────\n  Would you like to run the following command?\n  $ printf HERDR_PERMISSION_PROBE\n❯ 1. Yes, proceed (y)\n  5. No, and tell TraeCode CLI what to do differently (esc)\n  enter confirm  |  esc cancel",
         "─────────────────────\n  Question 1/1 (1 unanswered)\n  Should the probe color be red or blue?\n  ❯ 1. Red (Recommended)\n    2. Blue\n  tab add notes  |  enter submit answer  |  esc interrupt",
     ] {
-        let blocked = traex_halfblock_composer(panel);
-        let result = explain(Agent::Traex, &blocked);
-        assert_eq!(result.state, AgentState::Blocked, "{blocked}");
-        assert!(result.visible_blocker);
+        for blocked in [
+            traex_halfblock_composer(panel),
+            traex_halfblock_composer_with_footer(
+                panel,
+                "changed model · wrapped path\n  permission footer changed · ← for agents",
+            ),
+        ] {
+            let result = explain(Agent::Traex, &blocked);
+            assert_eq!(result.state, AgentState::Blocked, "{blocked}");
+            assert!(result.visible_blocker, "{blocked}");
+        }
     }
 
     let unknown_activity = traex_halfblock_composer("◆ Future activity… (5s • esc to interrupt)");
     let result = explain(Agent::Traex, &unknown_activity);
     assert_eq!(result.state, AgentState::Working, "{unknown_activity}");
     assert!(result.visible_working);
+
+    for status in [
+        "◆ Future activity… (5s • esc to interrupt)",
+        "✦ 状态文字换行\n  继续执行 (6s • esc to interrupt) · 1 shell running…",
+    ] {
+        let active_hybrid = traex_halfblock_composer_with_footer(
+            status,
+            "changed model · wrapped path\n  permission footer changed · ← for agents",
+        );
+        let result = explain(Agent::Traex, &active_hybrid);
+        assert_eq!(result.state, AgentState::Working, "{active_hybrid}");
+        assert!(result.visible_working, "{active_hybrid}");
+        assert_eq!(
+            result.matched_rule.as_ref().map(|rule| rule.id.as_str()),
+            Some("current_interrupt_working"),
+            "{active_hybrid}"
+        );
+    }
 
     let typed_prompt = format!("❯ Keep working\n{}", "▀".repeat(219));
     let result = explain(Agent::Traex, &typed_prompt);
@@ -403,12 +432,12 @@ fn traex_loaded_context_composer_accepts_captured_truncated_footer() {
     assert!(result.visible_idle);
     assert_eq!(
         result.matched_rule.as_ref().map(|rule| rule.id.as_str()),
-        Some("current_composer_idle")
+        Some("observed_screen_idle")
     );
 }
 
 #[test]
-fn traex_loaded_context_composer_requires_live_structure() {
+fn traex_loaded_context_composer_is_not_required_for_live_idle() {
     for (prompt, footer) in [
         (
             "Find and fix a bug in @filename",
@@ -442,8 +471,8 @@ fn traex_loaded_context_composer_requires_live_structure() {
         format!("{ready}user@host:~$ "),
     ] {
         let result = super::super::detect_agent(Some(Agent::Traex), &screen);
-        assert_eq!(result.state, AgentState::Unknown, "{screen}");
-        assert!(!result.visible_idle);
+        assert_eq!(result.state, AgentState::Idle, "{screen}");
+        assert!(result.visible_idle);
     }
 
     // Historical activity/approval text must not override the live composer.
@@ -470,7 +499,7 @@ fn traex_current_interrupt_control_is_label_independent() {
         "◆\tPhase-with-punctuation: I/O? (10s • esc to interrupt) · new control",
         "◆   Unknown activity (10s • esc to interrupt) · 1 shell running… · /ps to manage",
         "◆ Label wraps before the\n  control line (10s • esc to interrupt) · extra control\n  wrapped continuation",
-        "◆ 状态文字也可能换行\n  并继续 (5s • esc   to\ninterrupt) · 1 shell running… · /ps to\nmanage",
+        "◆ 状态文字也可能换行\n  并继续 (5s • esc   to\ninterrupt) · 1 shell running… · /ps to\n  manage",
     ] {
         let screen = traex_context_composer(
             status,
@@ -518,7 +547,43 @@ fn traex_current_interrupt_control_is_label_independent() {
 }
 
 #[test]
-fn traex_current_composer_idle_is_footer_and_layout_independent() {
+fn traex_captured_current_activity_control_is_structural() {
+    // Exact current tail captured from TraeCode CLI 0.207.1 in the final named
+    // lab. The diamond frame was not among the previously observed frames.
+    let active = "▍ anything else.\n\n\n⋄ Working… (3s • esc to interrupt)\n──────────────────────────────── Start conversation ─\n❯ Improve documentation in @filename\n─────────────────────────────────────────────────────\n  GPT-5.6-Sol high… ▧ Workspace Edit · ← for agents\n";
+    let result = explain(Agent::Traex, active);
+    assert_eq!(result.state, AgentState::Working, "{active}");
+    assert!(result.visible_working, "{active}");
+    assert_eq!(
+        result.matched_rule.as_ref().map(|rule| rule.id.as_str()),
+        Some("current_interrupt_working")
+    );
+
+    // The same captured control is historical once ordinary response text is
+    // below it; only the block immediately adjacent to the composer is live.
+    let historical = active.replace(
+        "⋄ Working… (3s • esc to interrupt)\n",
+        "⋄ Working… (3s • esc to interrupt)\nordinary completed response\n",
+    );
+    let result = explain(Agent::Traex, &historical);
+    assert_eq!(result.state, AgentState::Idle, "{historical}");
+    assert!(result.visible_idle, "{historical}");
+    assert_eq!(
+        result.matched_rule.as_ref().map(|rule| rule.id.as_str()),
+        Some("observed_screen_idle")
+    );
+
+    let settled = active.replace(
+        "⋄ Working… (3s • esc to interrupt)",
+        "◆ Ran sleep 15; printf 'TRAE_POST_REVIEW_DONE\\n'\n  └ TRAE_POST_REVIEW_DONE",
+    );
+    let result = explain(Agent::Traex, &settled);
+    assert_eq!(result.state, AgentState::Idle, "{settled}");
+    assert!(result.visible_idle, "{settled}");
+}
+
+#[test]
+fn traex_observed_idle_is_footer_and_layout_independent() {
     for (width, prompt, footer) in [
         (20, "", ""),
         (38, "typed but not submitted", "new model · unknown footer"),
@@ -534,7 +599,7 @@ fn traex_current_composer_idle_is_footer_and_layout_independent() {
         assert!(result.visible_idle, "{screen}");
         assert_eq!(
             result.matched_rule.as_ref().map(|rule| rule.id.as_str()),
-            Some("current_composer_idle")
+            Some("observed_screen_idle")
         );
     }
 
@@ -546,11 +611,43 @@ fn traex_current_composer_idle_is_footer_and_layout_independent() {
     assert_eq!(result.state, AgentState::Idle, "{typed_halfblock}");
     assert!(result.visible_idle);
 
-    for unreadable in ["", "◆ Completed", "ordinary transcript without a composer"] {
+    for unreadable in ["", "   \n\t"] {
         let result = explain(Agent::Traex, unreadable);
         assert_eq!(result.state, AgentState::Unknown, "{unreadable:?}");
         assert!(!result.visible_idle);
     }
+}
+
+#[test]
+fn traex_live_screen_without_current_activity_is_idle() {
+    let captured_tail = format!(
+        "{} Define herdr agent instructions ▄\n❯ Explain this codebase\n{}\n  GPT-5.6-Luna medium · Context 63% left · ⎇ herdr · /data00/home/chengyuhang/.treehouse/herdr-8a0084/1/herdr · No committed line changes                              ☢ Full Access (shift+tab to cycle) · ← for agents\n",
+        "▄".repeat(219),
+        "▀".repeat(219),
+    );
+
+    for screen in [
+        captured_tail,
+        "◆ Completed\n❯ next\n▀▀▀▀▀▀▀▀▀▀▀\n  a completely different footer".to_string(),
+        "◆ Completed\n❯ next\n▀▀▀▀▀▀▀▀▀▀▀".to_string(),
+        "◆ Completed\n❯ next\n▀▀▀▀▀▀▀▀▀▀▀\n  model · a wrapped footer\n  path · permission changed"
+            .to_string(),
+        "◆ Completed\ncurrent composer chrome changed".to_string(),
+        "historic ◈ Working… (20s • esc to interrupt)\n◆ Completed\ncurrent transcript".to_string(),
+    ] {
+        let result = explain(Agent::Traex, &screen);
+        assert_eq!(result.state, AgentState::Idle, "{screen}");
+        assert!(result.visible_idle, "{screen}");
+        assert_eq!(
+            result.matched_rule.as_ref().map(|rule| rule.id.as_str()),
+            Some("observed_screen_idle"),
+            "{screen}"
+        );
+    }
+
+    let unidentified = super::super::detect_agent(None, "◆ Completed\ncurrent transcript");
+    assert_eq!(unidentified.state, AgentState::Unknown);
+    assert!(!unidentified.visible_idle);
 }
 
 #[test]
@@ -565,6 +662,18 @@ fn traex_historic_activity_and_waits_do_not_override_current_composer() {
         assert_eq!(result.state, AgentState::Idle, "{screen}");
         assert!(result.visible_idle);
     }
+
+    let stale_hybrid = traex_halfblock_composer_with_footer(
+        "◆ Working… (2s • esc to interrupt)\nordinary completed response",
+        "changed model · path · permission",
+    );
+    let result = explain(Agent::Traex, &stale_hybrid);
+    assert_eq!(result.state, AgentState::Idle, "{stale_hybrid}");
+    assert!(result.visible_idle, "{stale_hybrid}");
+    assert_eq!(
+        result.matched_rule.as_ref().map(|rule| rule.id.as_str()),
+        Some("observed_screen_idle")
+    );
 }
 
 #[test]
@@ -594,7 +703,7 @@ fn traex_manifest_matches_only_captured_terminal_states() {
     assert_eq!(idle.state, AgentState::Idle);
     assert_eq!(
         idle.matched_rule.as_ref().map(|rule| rule.id.as_str()),
-        Some("current_composer_idle")
+        Some("observed_screen_idle")
     );
     assert!(idle.visible_idle);
 
@@ -608,7 +717,7 @@ fn traex_manifest_matches_only_captured_terminal_states() {
             .matched_rule
             .as_ref()
             .map(|rule| rule.id.as_str()),
-        Some("current_composer_idle")
+        Some("observed_screen_idle")
     );
     assert!(workspace_edit_idle.visible_idle);
 
@@ -625,7 +734,7 @@ fn traex_manifest_matches_only_captured_terminal_states() {
         assert_eq!(no_hint.state, AgentState::Idle);
         assert_eq!(
             no_hint.matched_rule.as_ref().map(|rule| rule.id.as_str()),
-            Some("current_composer_idle")
+            Some("observed_screen_idle")
         );
         assert!(no_hint.visible_idle);
     }
@@ -694,19 +803,16 @@ fn traex_manifest_matches_only_captured_terminal_states() {
         Some("alias_migration_prompt")
     );
 
-    let unobserved = explain(Agent::Traex, "an unobserved Traex surface");
-    assert_eq!(unobserved.state, AgentState::Unknown);
+    let observed = explain(Agent::Traex, "an observed Traex surface");
+    assert_eq!(observed.state, AgentState::Idle);
     assert_eq!(
-        unobserved
-            .matched_rule
-            .as_ref()
-            .map(|rule| rule.id.as_str()),
-        Some("unobserved_screen_unknown")
+        observed.matched_rule.as_ref().map(|rule| rule.id.as_str()),
+        Some("observed_screen_idle")
     );
-    assert_eq!(unobserved.fallback_reason, None);
-    assert!(!unobserved.visible_idle);
-    assert!(!unobserved.visible_working);
-    assert!(!unobserved.visible_blocker);
+    assert_eq!(observed.fallback_reason, None);
+    assert!(observed.visible_idle);
+    assert!(!observed.visible_working);
+    assert!(!observed.visible_blocker);
 }
 
 #[test]

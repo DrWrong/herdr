@@ -532,6 +532,34 @@ mod tests {
     }
 
     #[test]
+    fn process_exit_remains_distinct_from_ordinary_screen_idle() {
+        let detection = detection_update_for_publish(
+            Some(Agent::Traex),
+            "◆ Working… (2s • esc to interrupt)",
+            true,
+        )
+        .expect("process exit must publish");
+
+        assert_eq!(detection.state, AgentState::Idle);
+        assert!(detection.visible_idle);
+
+        let now = std::time::Instant::now();
+        let mut pending_idle = PendingIdleConfirmation::default();
+        let mut input = screen_publish_input(AgentState::Working, detection, now);
+        input.process_exited = true;
+        assert_eq!(
+            decide_screen_detection_publish(input, &mut pending_idle),
+            DetectionPublishDecision::Publish {
+                state: AgentState::Idle,
+                visible_idle: true,
+                visible_blocker: false,
+                visible_working: false,
+                process_exited: true,
+            }
+        );
+    }
+
+    #[test]
     fn detection_content_change_tracks_raw_nonempty_reads_for_scan_scheduling() {
         let seq = AtomicU64::new(0);
 
