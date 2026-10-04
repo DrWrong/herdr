@@ -333,6 +333,10 @@ fn traex_halfblock_composer(above: &str) -> String {
     )
 }
 
+fn traex_halfblock_composer_with_footer(above: &str, footer: &str) -> String {
+    format!("{}\n  {footer}", traex_halfblock_composer(above))
+}
+
 #[test]
 fn traex_halfblock_composer_replays_recorded_geometry() {
     let screen = traex_halfblock_composer("服务保持运行…");
@@ -383,6 +387,24 @@ fn traex_halfblock_composer_preserves_active_and_blocked_precedence() {
     let result = explain(Agent::Traex, &unknown_activity);
     assert_eq!(result.state, AgentState::Working, "{unknown_activity}");
     assert!(result.visible_working);
+
+    for status in [
+        "◆ Future activity… (5s • esc to interrupt)",
+        "✦ 状态文字换行\n  继续执行 (6s • esc to interrupt) · 1 shell running…",
+    ] {
+        let active_hybrid = traex_halfblock_composer_with_footer(
+            status,
+            "changed model · wrapped path\n  permission footer changed · ← for agents",
+        );
+        let result = explain(Agent::Traex, &active_hybrid);
+        assert_eq!(result.state, AgentState::Working, "{active_hybrid}");
+        assert!(result.visible_working, "{active_hybrid}");
+        assert_eq!(
+            result.matched_rule.as_ref().map(|rule| rule.id.as_str()),
+            Some("current_interrupt_working"),
+            "{active_hybrid}"
+        );
+    }
 
     let typed_prompt = format!("❯ Keep working\n{}", "▀".repeat(219));
     let result = explain(Agent::Traex, &typed_prompt);
